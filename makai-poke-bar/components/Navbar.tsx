@@ -38,10 +38,11 @@ export default function Navbar() {
           <Image
             src="/logo.png"
             alt="Makai Poke Bar"
-            width={120}
-            height={48}
-            className="h-11 w-auto object-contain rounded-lg"
+            width={160}
+            height={64}
+            className="h-14 w-auto object-contain"
             priority
+            unoptimized
           />
         </a>
 

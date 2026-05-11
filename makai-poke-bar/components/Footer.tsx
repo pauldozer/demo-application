@@ -56,7 +56,8 @@ export default function Footer() {
                 alt="Makai Poke Bar"
                 width={100}
                 height={40}
-                className="h-10 w-auto object-contain rounded-lg brightness-0 invert"
+                className="h-10 w-auto object-contain brightness-0 invert"
+                unoptimized
               />
             </div>
             <p className="font-body text-white/60 text-sm leading-relaxed italic">
