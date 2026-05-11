@@ -90,12 +90,24 @@ const bowlSections = [
 
 const tabs = ["Signature Bowls", "Burritos", "Appetizers", "Build a Bowl", "Desserts", "Drinks"];
 
-function AddToCartButton({ variantId, label = "Add to order" }: { variantId: string; label?: string }) {
-  const { addItem, isLoading } = useCart();
+function AddToCartButton({
+  variantId,
+  title,
+  price,
+  variantTitle,
+  label = "Add to order",
+}: {
+  variantId: string;
+  title: string;
+  price: string;
+  variantTitle?: string;
+  label?: string;
+}) {
+  const { addItem } = useCart();
   const [added, setAdded] = useState(false);
 
-  const handleAdd = async () => {
-    await addItem(variantId);
+  const handleAdd = () => {
+    addItem({ variantId, title, price: price.replace("$", ""), variantTitle });
     setAdded(true);
     setTimeout(() => setAdded(false), 1500);
   };
@@ -103,21 +115,11 @@ function AddToCartButton({ variantId, label = "Add to order" }: { variantId: str
   return (
     <button
       onClick={handleAdd}
-      disabled={isLoading}
-      className={`flex items-center justify-center gap-1.5 w-full py-2 rounded-full font-body text-xs font-semibold transition-all duration-200 active:scale-95 disabled:opacity-50 ${
-        added
-          ? "bg-green-500 text-white"
-          : "bg-accent text-white hover:bg-accent-dark"
+      className={`flex items-center justify-center gap-1.5 w-full py-2 rounded-full font-body text-xs font-semibold transition-all duration-200 active:scale-95 ${
+        added ? "bg-green-500 text-white" : "bg-accent text-white hover:bg-accent-dark"
       }`}
     >
-      {added ? (
-        "Added!"
-      ) : (
-        <>
-          <Plus size={12} />
-          {label}
-        </>
-      )}
+      {added ? "Added!" : <><Plus size={12} />{label}</>}
     </button>
   );
 }
@@ -145,7 +147,7 @@ function MenuCard({ item }: { item: MenuItem }) {
           ))}
         </div>
       )}
-      <AddToCartButton variantId={item.variantId} />
+      <AddToCartButton variantId={item.variantId} title={item.name} price={item.price} />
     </div>
   );
 }
@@ -176,7 +178,13 @@ function BuildABowl() {
           ))}
         </div>
         <div className="mt-4">
-          <AddToCartButton variantId={selectedSize.variantId} label={`Add ${selectedSize.size} Bowl to order`} />
+          <AddToCartButton
+            variantId={selectedSize.variantId}
+            title="Build Your Own Bowl"
+            price={selectedSize.price}
+            variantTitle={selectedSize.size}
+            label={`Add ${selectedSize.size} Bowl to order`}
+          />
         </div>
       </div>
 
