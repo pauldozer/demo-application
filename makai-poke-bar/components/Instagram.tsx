@@ -20,7 +20,7 @@ const posts = [
 
 export default function InstagramSection() {
   return (
-    <section id="instagram" className="bg-bg py-24 px-4">
+    <section id="instagram" className="py-24 px-4" style={{ backgroundColor: '#f7f1e8' }}>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <motion.div

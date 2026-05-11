@@ -112,7 +112,7 @@ export default function Menu() {
   const [active, setActive] = useState("Signature Bowls");
 
   return (
-    <section id="menu" className="bg-white py-24 px-4">
+    <section id="menu" className="py-24 px-4" style={{ backgroundColor: '#faf9f5' }}>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <div className="text-center mb-12">
@@ -183,7 +183,7 @@ export default function Menu() {
                 {menuData[active]?.map((item) => (
                   <div
                     key={item.name}
-                    className="bg-bg rounded-2xl p-5 border border-black/5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col gap-3"
+                    className="bg-white rounded-2xl p-5 border border-black/5 hover:shadow-md hover:-translate-y-0.5 transition-all duration-300 flex flex-col gap-3"
                   >
                     <div className="flex items-start justify-between gap-3">
                       <div className="flex items-center gap-2">

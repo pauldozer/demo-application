@@ -71,7 +71,7 @@ function Stars({ count }: { count: number }) {
 
 export default function Reviews() {
   return (
-    <section id="reviews" className="bg-white py-24 px-4">
+    <section id="reviews" className="py-24 px-4" style={{ backgroundColor: '#ebf4fd' }}>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <motion.div
@@ -108,7 +108,7 @@ export default function Reviews() {
                 whileInView={{ opacity: 1, y: 0 }}
                 viewport={{ once: true, margin: "-40px" }}
                 transition={{ delay: i * 0.08, duration: 0.5 }}
-                className="w-72 sm:w-auto flex-shrink-0 bg-bg rounded-2xl p-6 border border-black/5 hover:shadow-md transition-shadow duration-300 flex flex-col gap-4"
+                className="w-72 sm:w-auto flex-shrink-0 bg-white rounded-2xl p-6 border border-black/5 hover:shadow-md transition-shadow duration-300 flex flex-col gap-4"
               >
                 {/* Top */}
                 <div className="flex items-start justify-between">
@@ -144,7 +144,7 @@ export default function Reviews() {
           whileInView={{ opacity: 1, y: 0 }}
           viewport={{ once: true, margin: "-60px" }}
           transition={{ duration: 0.6 }}
-          className="mt-16 bg-light rounded-3xl p-10 text-center"
+          className="mt-16 bg-white rounded-3xl p-10 text-center shadow-sm"
         >
           <div className="inline-flex items-center justify-center w-14 h-14 bg-primary/10 rounded-full mb-5">
             <MapPin size={26} className="text-primary" />

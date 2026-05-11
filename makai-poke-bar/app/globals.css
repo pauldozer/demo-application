@@ -3,11 +3,17 @@
 @theme {
   --color-primary: #1b6ca8;
   --color-accent: #f4845f;
-  --color-bg: #fafaf8;
+  --color-bg: #faf9f5;
   --color-light: #e8f4fd;
   --color-text: #1a1a1a;
   --color-primary-dark: #155a8a;
   --color-accent-dark: #e06a44;
+
+  /* Section-specific palette */
+  --color-sage: #edf0e8;
+  --color-sand: #f7f1e8;
+  --color-ocean: #ebf4fd;
+  --color-forest: #4a6741;
 
   --font-heading: var(--font-playfair), Georgia, serif;
   --font-body: var(--font-inter), system-ui, sans-serif;
@@ -15,10 +21,13 @@
 
 html {
   scroll-behavior: smooth;
+  width: 100%;
 }
 
 body {
-  background-color: #fafaf8;
+  width: 100%;
+  overflow-x: hidden;
+  background-color: #faf9f5;
   color: #1a1a1a;
   font-family: var(--font-inter), system-ui, sans-serif;
 }

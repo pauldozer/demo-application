@@ -32,7 +32,7 @@ export default function Navbar() {
           : "bg-transparent"
       }`}
     >
-      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
         {/* Logo */}
         <a href="#home" className="flex items-center">
           <Image
@@ -40,7 +40,7 @@ export default function Navbar() {
             alt="Makai Poke Bar"
             width={160}
             height={64}
-            className="h-14 w-auto object-contain"
+            className="h-20 w-auto object-contain"
             priority
             unoptimized
           />

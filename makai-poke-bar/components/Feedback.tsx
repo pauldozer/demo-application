@@ -72,7 +72,7 @@ export default function Feedback() {
   };
 
   return (
-    <section id="contact" className="bg-bg py-24 px-4">
+    <section id="contact" className="py-24 px-4" style={{ backgroundColor: '#edf0e8' }}>
       <div className="max-w-6xl mx-auto">
         {/* Header */}
         <motion.div
