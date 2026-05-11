@@ -1,10 +1,11 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Menu, X } from "lucide-react";
+import { Menu, X, ShoppingBag } from "lucide-react";
 import InstagramIcon from "@/components/icons/InstagramIcon";
 import { AnimatePresence, motion } from "framer-motion";
 import Image from "next/image";
+import { useCart } from "@/context/CartContext";
 
 const navLinks = [
   { label: "Home", href: "#home" },
@@ -17,6 +18,7 @@ const navLinks = [
 export default function Navbar() {
   const [scrolled, setScrolled] = useState(false);
   const [open, setOpen] = useState(false);
+  const { itemCount, openCart } = useCart();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 20);
@@ -27,9 +29,7 @@ export default function Navbar() {
   return (
     <header
       className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
-        scrolled
-          ? "bg-white/90 backdrop-blur-md shadow-sm"
-          : "bg-transparent"
+        scrolled ? "bg-white/90 backdrop-blur-md shadow-sm" : "bg-transparent"
       }`}
     >
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-20 flex items-center justify-between">
@@ -69,32 +69,55 @@ export default function Navbar() {
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Instagram"
-            className={`transition-colors hover:text-accent ${
-              scrolled ? "text-text/70" : "text-white/80"
-            }`}
+            className={`transition-colors hover:text-accent ${scrolled ? "text-text/70" : "text-white/80"}`}
           >
             <InstagramIcon size={20} />
           </a>
+
+          {/* Cart button */}
+          <button
+            onClick={openCart}
+            aria-label="Open cart"
+            className={`relative transition-colors hover:text-accent ${scrolled ? "text-text/70" : "text-white/80"}`}
+          >
+            <ShoppingBag size={22} />
+            {itemCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 w-4.5 h-4.5 min-w-[18px] bg-accent text-white text-[10px] font-body font-bold rounded-full flex items-center justify-center px-1 leading-none">
+                {itemCount}
+              </span>
+            )}
+          </button>
+
           <a
-            href="https://wa.me/96176173251"
-            target="_blank"
-            rel="noopener noreferrer"
+            href="#menu"
             className="bg-accent text-white px-5 py-2 rounded-full text-sm font-body font-semibold hover:bg-accent-dark active:scale-95 transition-all duration-200"
           >
             Order Now
           </a>
         </div>
 
-        {/* Mobile hamburger */}
-        <button
-          className={`md:hidden transition-colors ${
-            scrolled ? "text-text" : "text-white"
-          }`}
-          onClick={() => setOpen((v) => !v)}
-          aria-label="Toggle menu"
-        >
-          {open ? <X size={24} /> : <Menu size={24} />}
-        </button>
+        {/* Mobile right */}
+        <div className="flex md:hidden items-center gap-3">
+          <button
+            onClick={openCart}
+            aria-label="Open cart"
+            className={`relative transition-colors ${scrolled ? "text-text" : "text-white"}`}
+          >
+            <ShoppingBag size={22} />
+            {itemCount > 0 && (
+              <span className="absolute -top-1.5 -right-1.5 min-w-[18px] bg-accent text-white text-[10px] font-body font-bold rounded-full flex items-center justify-center px-1 leading-none h-[18px]">
+                {itemCount}
+              </span>
+            )}
+          </button>
+          <button
+            className={`transition-colors ${scrolled ? "text-text" : "text-white"}`}
+            onClick={() => setOpen((v) => !v)}
+            aria-label="Toggle menu"
+          >
+            {open ? <X size={24} /> : <Menu size={24} />}
+          </button>
+        </div>
       </nav>
 
       {/* Mobile menu */}
@@ -121,9 +144,7 @@ export default function Navbar() {
               ))}
               <li className="pt-2">
                 <a
-                  href="https://wa.me/96176173251"
-                  target="_blank"
-                  rel="noopener noreferrer"
+                  href="#menu"
                   onClick={() => setOpen(false)}
                   className="inline-block bg-accent text-white px-6 py-2.5 rounded-full text-sm font-body font-semibold hover:bg-accent-dark transition-colors"
                 >
