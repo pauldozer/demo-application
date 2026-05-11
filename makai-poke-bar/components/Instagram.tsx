@@ -1,5 +1,6 @@
 // Replace placeholder images with actual Instagram embed once Basic Display API token is obtained
 // API docs: https://developers.facebook.com/docs/instagram-basic-display-api
+// Currently using downloaded photos from @makai.lb — update periodically
 
 "use client";
 
@@ -7,22 +8,14 @@ import Image from "next/image";
 import { motion } from "framer-motion";
 import InstagramIcon from "@/components/icons/InstagramIcon";
 
+// Actual photos from @makai.lb Instagram — downloaded locally for reliability
 const posts = [
-  { id: "1", query: "poke-bowl,salmon", seed: 1 },
-  { id: "2", query: "poke-bowl,tuna", seed: 2 },
-  { id: "3", query: "poke-bowl,avocado", seed: 3 },
-  { id: "4", query: "poke-bowl,fresh", seed: 4 },
-  { id: "5", query: "poke-bowl,healthy", seed: 5 },
-  { id: "6", query: "hawaiian-food,bowl", seed: 6 },
-];
-
-const UNSPLASH_IDS = [
-  "photo-1546069901-ba9599a7e63c",
-  "photo-1512621776951-a57141f2eefd",
-  "photo-1540420773420-3366772f4999",
-  "photo-1547592166-23ac45744acd",
-  "photo-1467003909585-2f8a72700288",
-  "photo-1490645935967-10de6ba17061",
+  { src: "/ig-post-1.jpg", alt: "Makai sushi cake with salmon and avocado" },
+  { src: "/ig-post-2.jpg", alt: "Makai poke bowl fresh ingredients" },
+  { src: "/ig-post-3.jpg", alt: "Makai poke bowl with shrimp salmon and mango" },
+  { src: "/ig-post-4.jpg", alt: "Makai fresh poke bowl creation" },
+  { src: "/ig-post-5.jpg", alt: "Makai poke bowl by the Mediterranean sea" },
+  { src: "/ig-post-6.jpg", alt: "Makai poke bowl with fresh toppings" },
 ];
 
 export default function InstagramSection() {
@@ -50,9 +43,9 @@ export default function InstagramSection() {
 
         {/* Grid */}
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-10">
-          {UNSPLASH_IDS.map((photoId, i) => (
+          {posts.map((post, i) => (
             <motion.a
-              key={photoId}
+              key={post.src}
               href="https://www.instagram.com/makai.lb"
               target="_blank"
               rel="noopener noreferrer"
@@ -63,8 +56,8 @@ export default function InstagramSection() {
               className="group relative aspect-square rounded-2xl overflow-hidden bg-light"
             >
               <Image
-                src={`https://images.unsplash.com/${photoId}?w=400&h=400&fit=crop&q=75`}
-                alt={`Makai poke bowl ${i + 1}`}
+                src={post.src}
+                alt={post.alt}
                 fill
                 className="object-cover transition-transform duration-500 group-hover:scale-105"
                 sizes="(max-width: 640px) 50vw, 33vw"

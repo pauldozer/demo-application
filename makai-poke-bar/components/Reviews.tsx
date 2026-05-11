@@ -3,9 +3,8 @@
 import { motion } from "framer-motion";
 import { MapPin } from "lucide-react";
 
-// TODO: Replace YOUR_PLACE_ID with the actual Google Place ID from Google Business Profile
-const GOOGLE_REVIEW_URL =
-  "https://search.google.com/local/writereview?placeid=YOUR_PLACE_ID";
+const GOOGLE_MAPS_URL =
+  "https://www.google.com/maps/place/Makai+Poke+Bar/@34.4404617,35.8298546,17z/data=!3m1!4b1!4m6!3m5!1s0x1521f7000013e48d:0xb97a5e9e1c94fa4c!8m2!3d34.4404617!4d35.8298546!16s%2Fg%2F11x0x57828";
 
 const reviews = [
   {
@@ -13,7 +12,7 @@ const reviews = [
     initials: "SM",
     color: "bg-blue-100 text-blue-700",
     rating: 5,
-    text: "The Makai Classic is hands down the best poke bowl I've had outside of Hawaii. The salmon was so fresh it melted on my tongue, and the sesame ginger sauce tied everything together perfectly. The vibe is clean, modern, and welcoming. A true gem in Beirut.",
+    text: "The Makai Classic is hands down the best poke bowl I've had. The salmon was incredibly fresh — you can taste the quality immediately. Beautiful place in Tripoli, clean and modern. Will absolutely be back!",
     date: "2 weeks ago",
   },
   {
@@ -21,7 +20,7 @@ const reviews = [
     initials: "KB",
     color: "bg-amber-100 text-amber-700",
     rating: 5,
-    text: "Spicy Tuna Fire had exactly the kick I was craving. The ingredients taste incredibly fresh — you can tell they're not cutting corners. The crispy onions on top added the perfect crunch. Fast service, beautiful presentation, reasonable prices. Will be back weekly.",
+    text: "Spicy Tuna Fire was everything I wanted — the perfect kick without being overwhelming. The crispy onions added amazing texture. So glad Tripoli finally has a legit poke spot. Staff were super friendly.",
     date: "1 month ago",
   },
   {
@@ -29,7 +28,7 @@ const reviews = [
     initials: "LH",
     color: "bg-emerald-100 text-emerald-700",
     rating: 5,
-    text: "Green Goddess converted my boyfriend into a tofu believer. We both got custom bowls — mine with salmon, his with tofu — and they were both incredible. The ponzu sauce is so good I asked if they sell it by the bottle. The staff were genuinely lovely.",
+    text: "The shrimp poke bowl was absolutely divine — fresh ingredients, perfectly portioned, gorgeous presentation. The vibe is so relaxing. Tarik El Mina has a hidden gem. Highly recommend!",
     date: "3 weeks ago",
   },
   {
@@ -37,7 +36,7 @@ const reviews = [
     initials: "OF",
     color: "bg-purple-100 text-purple-700",
     rating: 5,
-    text: "Ocean Deep with truffle ponzu is an absolute experience. The combination of salmon and tuna on cauliflower rice felt luxurious without being heavy. Staff are warm, welcoming, and clearly passionate about what they serve. Best healthy lunch spot in the city.",
+    text: "Went with the salmon bowl and a side of mango — incredible combination. The sesame ginger sauce is addictive. The place feels like a little slice of Hawaii in Tripoli. 10/10 experience.",
     date: "1 week ago",
   },
   {
@@ -45,7 +44,7 @@ const reviews = [
     initials: "MR",
     color: "bg-rose-100 text-rose-700",
     rating: 5,
-    text: "The Beirut bowl is a must-order. Mango + shrimp + sweet soy is such a genius combination — sweet, savoury, and fresh all at once. It feels like a love letter to Lebanon wrapped in a Hawaiian bowl. The space is beautiful and the music sets the perfect mood.",
+    text: "The sushi cake is unreal — a showstopper visually and taste-wise. Every layer was perfectly balanced. This place has completely changed the food scene in Tripoli. We were blown away.",
     date: "2 months ago",
   },
   {
@@ -53,7 +52,7 @@ const reviews = [
     initials: "JS",
     color: "bg-teal-100 text-teal-700",
     rating: 5,
-    text: "Best spot in Beirut for a healthy lunch. Fast, fresh, and the portions are more generous than you'd expect. I love that everything is fully customizable — I'm a creature of habit with my salmon brown rice bowl. Consistent quality every single time.",
+    text: "Best healthy food in Tripoli, no contest. Fast, fresh, and the portions are generous. I love that everything is fully customizable. Come here every week now — consistent quality every single time.",
     date: "5 days ago",
   },
 ];
@@ -91,7 +90,7 @@ export default function Reviews() {
           <div className="inline-flex items-center gap-2 bg-yellow-50 border border-yellow-200 rounded-full px-5 py-2">
             <Stars count={5} />
             <span className="font-body font-semibold text-sm text-text">
-              4.8 / 5
+              4.9 / 5
             </span>
             <span className="font-body text-sm text-text/50">
               — Based on Google Reviews
@@ -154,10 +153,10 @@ export default function Reviews() {
             Enjoyed your bowl? Leave us a review ❤️
           </h3>
           <p className="font-body text-text/60 mb-6 max-w-sm mx-auto">
-            Your feedback helps us grow and reach more poke lovers in Beirut.
+            Your feedback helps us grow and reach more poke lovers in Tripoli.
           </p>
           <a
-            href={GOOGLE_REVIEW_URL}
+            href={GOOGLE_MAPS_URL}
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-2 bg-primary text-white px-8 py-3.5 rounded-full font-body font-semibold hover:bg-primary-dark active:scale-95 transition-all duration-200"

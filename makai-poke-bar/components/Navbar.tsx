@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { Menu, X } from "lucide-react";
 import InstagramIcon from "@/components/icons/InstagramIcon";
 import { AnimatePresence, motion } from "framer-motion";
+import Image from "next/image";
 
 const navLinks = [
   { label: "Home", href: "#home" },
@@ -33,21 +34,15 @@ export default function Navbar() {
     >
       <nav className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
         {/* Logo */}
-        <a href="#home" className="flex flex-col leading-none">
-          <span
-            className={`font-heading font-black text-xl tracking-tight transition-colors duration-300 ${
-              scrolled ? "text-primary" : "text-white"
-            }`}
-          >
-            MAKAI
-          </span>
-          <span
-            className={`font-body text-[9px] tracking-[0.25em] uppercase transition-colors duration-300 ${
-              scrolled ? "text-text/60" : "text-white/70"
-            }`}
-          >
-            Poke Bar
-          </span>
+        <a href="#home" className="flex items-center">
+          <Image
+            src="/logo.png"
+            alt="Makai Poke Bar"
+            width={120}
+            height={48}
+            className="h-11 w-auto object-contain rounded-lg"
+            priority
+          />
         </a>
 
         {/* Desktop links */}
@@ -80,7 +75,9 @@ export default function Navbar() {
             <InstagramIcon size={20} />
           </a>
           <a
-            href="#menu"
+            href="https://wa.me/96176173251"
+            target="_blank"
+            rel="noopener noreferrer"
             className="bg-accent text-white px-5 py-2 rounded-full text-sm font-body font-semibold hover:bg-accent-dark active:scale-95 transition-all duration-200"
           >
             Order Now
@@ -123,7 +120,9 @@ export default function Navbar() {
               ))}
               <li className="pt-2">
                 <a
-                  href="#menu"
+                  href="https://wa.me/96176173251"
+                  target="_blank"
+                  rel="noopener noreferrer"
                   onClick={() => setOpen(false)}
                   className="inline-block bg-accent text-white px-6 py-2.5 rounded-full text-sm font-body font-semibold hover:bg-accent-dark transition-colors"
                 >

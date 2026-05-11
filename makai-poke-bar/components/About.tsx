@@ -17,8 +17,8 @@ const features = [
   },
   {
     icon: Heart,
-    title: "Lebanese Heart",
-    desc: "Hawaiian soul meets Beirut spirit. We bring aloha to the heart of Lebanon, one bowl at a time.",
+    title: "Tripoli Heart",
+    desc: "Hawaiian soul meets Tripoli spirit. We bring aloha to the heart of North Lebanon, one bowl at a time.",
   },
 ];
 
@@ -50,15 +50,15 @@ export default function About() {
               <strong className="text-text">Makai</strong> means &ldquo;toward
               the sea&rdquo; in Hawaiian — and that spirit guides everything we
               do. Born from a love of fresh, vibrant Hawaiian cuisine, Makai
-              Poke Bar opened its doors in Beirut to bring the authentic poke
-              bowl experience to Lebanon.
+              Poke Bar opened its doors in Tripoli to bring the authentic poke
+              bowl experience to North Lebanon.
             </p>
             <p>
               We handpick every ingredient, prep everything fresh each morning,
               and believe that great food should be both nourishing and
               exciting. From our ocean-fresh proteins to our handcrafted sauces,
               every bowl is a taste of the Pacific — built your way, right here
-              in the heart of Beirut.
+              in Tarik El Mina, Tripoli.
             </p>
           </div>
         </motion.div>

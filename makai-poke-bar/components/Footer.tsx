@@ -1,5 +1,6 @@
 import { MapPin, MessageCircle } from "lucide-react";
 import InstagramIcon from "@/components/icons/InstagramIcon";
+import Image from "next/image";
 
 const quickLinks = [
   { label: "Home", href: "#home" },
@@ -11,21 +12,19 @@ const quickLinks = [
 
 const socials = [
   {
-    icon: InstagramIcon,
+    Icon: InstagramIcon,
     label: "Instagram",
     href: "https://www.instagram.com/makai.lb",
   },
   {
-    icon: MapPin,
+    Icon: MapPin,
     label: "Google Maps",
-    // TODO: Replace with actual Google Maps link for Makai Poke Bar
-    href: "https://maps.google.com",
+    href: "https://www.google.com/maps/place/Makai+Poke+Bar/@34.4404617,35.8298546,17z/data=!3m1!4b1!4m6!3m5!1s0x1521f7000013e48d:0xb97a5e9e1c94fa4c!8m2!3d34.4404617!4d35.8298546!16s%2Fg%2F11x0x57828",
   },
   {
-    icon: MessageCircle,
+    Icon: MessageCircle,
     label: "WhatsApp",
-    // TODO: Replace with actual WhatsApp number
-    href: "https://wa.me/961XXXXXXXX",
+    href: "https://wa.me/96176173251",
   },
 ];
 
@@ -52,16 +51,19 @@ export default function Footer() {
           {/* Brand */}
           <div>
             <div className="mb-4">
-              <p className="font-heading font-black text-2xl tracking-tight">MAKAI</p>
-              <p className="font-body text-[10px] tracking-[0.3em] uppercase text-white/60">
-                Poke Bar
-              </p>
+              <Image
+                src="/logo.png"
+                alt="Makai Poke Bar"
+                width={100}
+                height={40}
+                className="h-10 w-auto object-contain rounded-lg brightness-0 invert"
+              />
             </div>
             <p className="font-body text-white/60 text-sm leading-relaxed italic">
               &ldquo;Fresh. Bold. Hawaiian.&rdquo;
             </p>
             <p className="font-body text-white/50 text-xs mt-3">
-              Bringing aloha to Beirut, one bowl at a time.
+              Bringing aloha to Tripoli, one bowl at a time.
             </p>
           </div>
 
@@ -99,15 +101,18 @@ export default function Footer() {
                   aria-label={s.label}
                   className="w-10 h-10 bg-white/10 rounded-full flex items-center justify-center text-white/70 hover:bg-white/20 hover:text-white hover:-translate-y-0.5 transition-all duration-200"
                 >
-                  <s.icon size={18} />
+                  <s.Icon size={18} />
                 </a>
               ))}
             </div>
             <p className="font-body text-sm text-white/60">
-              Mon – Sun · 11:00 AM – 10:00 PM
+              Sun–Fri 12:00 PM – 11:00 PM
+            </p>
+            <p className="font-body text-sm text-white/60">
+              Sat 12:00 PM – 12:00 AM
             </p>
             <p className="font-body text-sm text-white/60 mt-1">
-              Beirut, Lebanon
+              Tarik El Mina, Tripoli, Lebanon
             </p>
           </div>
         </div>

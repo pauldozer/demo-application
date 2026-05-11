@@ -21,10 +21,11 @@ const contactInfo = [
   {
     icon: MapPin,
     label: "Location",
-    value: "Beirut, Lebanon",
-    sub: "Find us on Google Maps",
+    value: "Tarik El Mina, Tripoli",
+    sub: "Lebanon",
     color: "text-primary",
     bg: "bg-light",
+    href: "https://www.google.com/maps/place/Makai+Poke+Bar/@34.4404617,35.8298546,17z/data=!3m1!4b1!4m6!3m5!1s0x1521f7000013e48d:0xb97a5e9e1c94fa4c!8m2!3d34.4404617!4d35.8298546!16s%2Fg%2F11x0x57828",
   },
   {
     icon: InstagramIcon,
@@ -38,17 +39,17 @@ const contactInfo = [
   {
     icon: Clock,
     label: "Hours",
-    value: "Mon – Sun",
-    sub: "11:00 AM – 10:00 PM",
+    value: "Sun–Fri 12:00 PM – 11:00 PM",
+    sub: "Sat 12:00 PM – 12:00 AM",
     color: "text-emerald-600",
     bg: "bg-emerald-50",
   },
   {
     icon: Phone,
-    label: "Phone",
-    // TODO: Add actual phone number
-    value: "+961 XX XXX XXX",
-    sub: "Call or WhatsApp",
+    label: "Phone / WhatsApp",
+    value: "+961 76 173 251",
+    sub: "Place your orders through WhatsApp",
+    href: "https://wa.me/96176173251",
     color: "text-purple-600",
     bg: "bg-purple-50",
   },
@@ -274,13 +275,20 @@ export default function Feedback() {
               </div>
             ))}
 
-            {/* Map embed placeholder */}
-            {/* TODO: Replace src with actual Google Maps embed URL from: Maps → Share → Embed a map */}
+            {/* Google Maps embed placeholder */}
+            {/* TODO: Replace iframe src with actual embed URL: Google Maps → Makai Poke Bar → Share → Embed a map */}
             <div className="rounded-2xl overflow-hidden border border-black/5 bg-light flex items-center justify-center h-48 text-text/30 font-body text-sm">
               <div className="text-center">
                 <MapPin size={32} className="mx-auto mb-2 text-text/20" />
-                <p>Google Maps embed</p>
-                <p className="text-xs">Replace with actual embed URL</p>
+                <p>Tarik El Mina, Tripoli</p>
+                <a
+                  href="https://www.google.com/maps/place/Makai+Poke+Bar/@34.4404617,35.8298546,17z/data=!3m1!4b1!4m6!3m5!1s0x1521f7000013e48d:0xb97a5e9e1c94fa4c!8m2!3d34.4404617!4d35.8298546!16s%2Fg%2F11x0x57828"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-primary hover:underline"
+                >
+                  Open in Google Maps →
+                </a>
               </div>
             </div>
           </motion.div>
