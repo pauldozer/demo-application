@@ -11,10 +11,14 @@ const path         = require('path');
 const fs           = require('fs');
 
 const runMigrations = require('./db/migrate');
-const authRoutes    = require('./routes/auth');
-const patientRoutes = require('./routes/patients');
-const userRoutes    = require('./routes/users');
-const statsRoutes   = require('./routes/stats');
+const authRoutes          = require('./routes/auth');
+const patientRoutes       = require('./routes/patients');
+const userRoutes          = require('./routes/users');
+const statsRoutes         = require('./routes/stats');
+const consultationRoutes  = require('./routes/consultations');
+const prescriptionRoutes  = require('./routes/prescriptions');
+const medicationRoutes    = require('./routes/medications');
+const fileRoutes          = require('./routes/files');
 
 // ── Ensure data directories exist ──────────────────────
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, '..', 'data');
@@ -43,10 +47,14 @@ app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
 app.set('io', io);
 
 // ── API Routes ──────────────────────────────────────────
-app.use('/api/auth',     authRoutes);
-app.use('/api/patients', patientRoutes);
-app.use('/api/users',    userRoutes);
-app.use('/api/stats',    statsRoutes);
+app.use('/api/auth',          authRoutes);
+app.use('/api/patients',      patientRoutes);
+app.use('/api/users',         userRoutes);
+app.use('/api/stats',         statsRoutes);
+app.use('/api/consultations', consultationRoutes);
+app.use('/api/prescriptions', prescriptionRoutes);
+app.use('/api/medications',   medicationRoutes);
+app.use('/api/files',         fileRoutes);
 
 // ── Health check ────────────────────────────────────────
 app.get('/api/health', (req, res) => {

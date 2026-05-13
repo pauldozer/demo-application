@@ -2,16 +2,19 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card, Tabs, Descriptions, Tag, Button, Space,
-  Typography, Skeleton, Alert, Avatar, Row, Col, Empty, App
+  Typography, Skeleton, Alert, Avatar, Row, Col, App
 } from 'antd';
 import {
-  ArrowLeftOutlined, EditOutlined,
-  AlertOutlined, HeartOutlined, FileTextOutlined,
-  MedicineBoxOutlined, FolderOpenOutlined
+  ArrowLeftOutlined, EditOutlined, AlertOutlined,
+  HeartOutlined, FileTextOutlined, MedicineBoxOutlined,
+  FolderOpenOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { patientsApi } from '../api/patients.api';
-import PatientForm from '../components/patients/PatientForm';
+import { patientsApi }       from '../api/patients.api';
+import PatientForm           from '../components/patients/PatientForm';
+import ConsultationList      from '../components/consultation/ConsultationList';
+import MedicationList        from '../components/medications/MedicationList';
+import FileManager           from '../components/files/FileManager';
 
 const { Title, Text } = Typography;
 
@@ -41,15 +44,6 @@ export default function PatientDetailPage() {
 
   if (loading) return <Skeleton active paragraph={{ rows: 10 }} />;
   if (!patient) return null;
-
-  const comingSoon = (label) => (
-    <Card>
-      <Empty
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description={`${label} — coming in Phase 2`}
-      />
-    </Card>
-  );
 
   const tabs = [
     {
@@ -105,40 +99,26 @@ export default function PatientDetailPage() {
 
           <Col xs={24} lg={10}>
             <Card
-              title={
-                <Space>
-                  <AlertOutlined style={{ color: '#ff4d4f' }} />
-                  Allergies
-                </Space>
-              }
+              title={<Space><AlertOutlined style={{ color: '#ff4d4f' }} />Allergies</Space>}
               size="small"
               style={{ marginBottom: 12 }}
             >
               {patient.allergies?.length
                 ? <Space wrap size={[6, 6]}>
-                    {patient.allergies.map((a, i) => (
-                      <Tag key={i} color="error">{a}</Tag>
-                    ))}
+                    {patient.allergies.map((a, i) => <Tag key={i} color="error">{a}</Tag>)}
                   </Space>
                 : <Text type="secondary">No known allergies</Text>}
             </Card>
 
             <Card
-              title={
-                <Space>
-                  <HeartOutlined style={{ color: '#fa8c16' }} />
-                  Chronic Conditions
-                </Space>
-              }
+              title={<Space><HeartOutlined style={{ color: '#fa8c16' }} />Chronic Conditions</Space>}
               size="small"
             >
               {patient.chronic_conditions?.length
                 ? <Space wrap size={[6, 6]}>
-                    {patient.chronic_conditions.map((c, i) => (
-                      <Tag key={i} color="warning">{c}</Tag>
-                    ))}
+                    {patient.chronic_conditions.map((c, i) => <Tag key={i} color="warning">{c}</Tag>)}
                   </Space>
-                : <Text type="secondary">No chronic conditions recorded</Text>}
+                : <Text type="secondary">No chronic conditions</Text>}
             </Card>
 
             {patient.notes && (
@@ -153,31 +133,28 @@ export default function PatientDetailPage() {
     {
       key: 'consultations',
       label: <Space><FileTextOutlined />Consultations</Space>,
-      children: comingSoon('Consultations')
+      children: <ConsultationList patientId={id} />
     },
     {
       key: 'medications',
       label: <Space><MedicineBoxOutlined />Medications</Space>,
-      children: comingSoon('Medication history')
+      children: <MedicationList patientId={id} />
     },
     {
       key: 'files',
       label: <Space><FolderOpenOutlined />Files & Labs</Space>,
-      children: comingSoon('Lab results and imaging files')
+      children: <FileManager patientId={id} />
     }
   ];
 
   return (
     <div>
-      {/* ── Header bar ── */}
+      {/* ── Header ── */}
       <div style={{
         display: 'flex', alignItems: 'center', gap: 14,
         marginBottom: 20, flexWrap: 'wrap'
       }}>
-        <Button
-          icon={<ArrowLeftOutlined />}
-          onClick={() => navigate('/patients')}
-        />
+        <Button icon={<ArrowLeftOutlined />} onClick={() => navigate('/patients')} />
 
         <Avatar
           size={52}
@@ -190,7 +167,7 @@ export default function PatientDetailPage() {
         </Avatar>
 
         <div style={{ flex: 1, minWidth: 0 }}>
-          <Title level={4} style={{ margin: 0 }}>{patient.full_name}</Title>
+          <Title level={4} style={{ margin: 0, whiteSpace: 'nowrap' }}>{patient.full_name}</Title>
           <Space wrap size={6}>
             <Tag style={{ fontFamily: 'monospace' }}>{patient.patient_number}</Tag>
             {patient.gender && (
@@ -199,18 +176,11 @@ export default function PatientDetailPage() {
             {patient.blood_type && (
               <Tag color="error" style={{ fontWeight: 700 }}>{patient.blood_type}</Tag>
             )}
-            {patient.dob && (
-              <Text type="secondary">{patient.age} years old</Text>
-            )}
+            {patient.dob && <Text type="secondary">{patient.age} years old</Text>}
           </Space>
         </div>
 
-        <Button
-          icon={<EditOutlined />}
-          onClick={() => setE(true)}
-        >
-          Edit Patient
-        </Button>
+        <Button icon={<EditOutlined />} onClick={() => setE(true)}>Edit Patient</Button>
       </div>
 
       {/* ── Allergy banner ── */}
@@ -235,11 +205,7 @@ export default function PatientDetailPage() {
       <PatientForm
         open={showEdit}
         patient={patient}
-        onSuccess={(updated) => {
-          setP(updated);
-          setE(false);
-          message.success('Patient updated');
-        }}
+        onSuccess={(updated) => { setP(updated); setE(false); message.success('Patient updated'); }}
         onCancel={() => setE(false)}
       />
     </div>

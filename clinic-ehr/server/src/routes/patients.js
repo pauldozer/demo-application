@@ -1,9 +1,12 @@
 const express = require('express');
 const { body, query, validationResult } = require('express-validator');
-const { verifyToken }  = require('../middleware/auth');
-const { requireRole }  = require('../middleware/roles');
-const { auditLog }     = require('../middleware/audit');
-const PatientService   = require('../services/patient.service');
+const { verifyToken }         = require('../middleware/auth');
+const { requireRole }         = require('../middleware/roles');
+const { auditLog }            = require('../middleware/audit');
+const PatientService          = require('../services/patient.service');
+const ConsultationService     = require('../services/consultation.service');
+const FileService             = require('../services/file.service');
+const pool                    = require('../db/pool');
 
 const router = express.Router();
 
@@ -157,6 +160,47 @@ router.delete('/:id', requireRole('admin'), async (req, res) => {
     return res.json({ message: 'Patient deleted' });
   } catch (err) {
     console.error('Delete patient error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── GET /api/patients/:id/consultations ────────────────
+router.get('/:id/consultations', async (req, res) => {
+  try {
+    const consultations = await ConsultationService.listForPatient(req.params.id);
+    return res.json(consultations);
+  } catch (err) {
+    console.error('List consultations error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── GET /api/patients/:id/prescriptions ────────────────
+router.get('/:id/prescriptions', async (req, res) => {
+  try {
+    const { rows } = await pool.query(`
+      SELECT p.*, u.name AS doctor_name,
+             c.visit_date AS consultation_date
+      FROM prescriptions p
+      JOIN users u ON p.doctor_id = u.id
+      LEFT JOIN consultations c ON p.consultation_id = c.id
+      WHERE p.patient_id = $1
+      ORDER BY p.is_current DESC, p.prescribed_at DESC
+    `, [req.params.id]);
+    return res.json(rows);
+  } catch (err) {
+    console.error('List prescriptions error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
+// ── GET /api/patients/:id/files ─────────────────────────
+router.get('/:id/files', async (req, res) => {
+  try {
+    const files = await FileService.listForPatient(req.params.id);
+    return res.json(files);
+  } catch (err) {
+    console.error('List files error:', err);
     return res.status(500).json({ error: 'Server error' });
   }
 });
