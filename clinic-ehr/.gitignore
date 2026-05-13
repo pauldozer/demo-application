@@ -1,0 +1,20 @@
+node_modules/
+.env
+*.env.local
+dist/
+.next/
+
+# Runtime data — never commit
+server/data/
+
+# Logs
+*.log
+logs/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build output
+server/dist/
+client/dist/

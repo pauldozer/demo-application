@@ -1,0 +1,43 @@
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto,
+               'Helvetica Neue', Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+#root {
+  height: 100%;
+}
+
+/* Highlight table rows on hover */
+.ant-table-tbody > tr:hover > td {
+  background-color: #f0f7ff !important;
+  cursor: pointer;
+}
+
+/* Ant Design layout transitions */
+.ant-layout-sider {
+  transition: width 0.2s ease !important;
+  transition: flex 0.2s ease !important;
+  transition: min-width 0.2s ease !important;
+  transition: max-width 0.2s ease !important;
+}
+
+/* Allergy tags — always red */
+.allergy-tag {
+  border-color: #ff4d4f !important;
+  color: #ff4d4f !important;
+  background: #fff1f0 !important;
+}
+
+/* Subtle scrollbar */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #d9d9d9; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #bfbfbf; }
