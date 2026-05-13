@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Drawer, Form, Input, Button, Select, Space, App } from 'antd';
+import { Drawer, Form, Input, Button, Select, AutoComplete, Space, App } from 'antd';
 import { medicationsApi } from '../../api/medications.api';
 import { prescriptionsApi } from '../../api/prescriptions.api';
 
@@ -16,32 +16,30 @@ const DUR_OPTIONS = [
 ];
 
 export default function PrescriptionDrawer({ open, patientId, consultationId, onClose, onAdded }) {
-  const [form]                = Form.useForm();
-  const { message }           = App.useApp();
-  const [saving, setSaving]   = useState(false);
-  const [medOptions, setMedOpts] = useState([]);
-  const [searching, setSearching] = useState(false);
+  const [form]                  = Form.useForm();
+  const { message }             = App.useApp();
+  const [saving, setSaving]     = useState(false);
+  const [acOptions, setAcOpts]  = useState([]);
+  const [medIdRef, setMedIdRef] = useState(null); // tracks DB id when user picks from list
 
-  const searchMeds = async (q) => {
-    if (!q || q.length < 2) return;
-    setSearching(true);
+  // Search medication library for autocomplete suggestions
+  const handleMedSearch = async (text) => {
+    setMedIdRef(null); // clear any previous selection id when user re-types
+    if (!text || text.length < 2) { setAcOpts([]); return; }
     try {
-      const meds = await medicationsApi.search(q);
-      setMedOpts(meds.map(m => ({
-        value: m.id,
-        label: `${m.name}${m.strength ? ' ' + m.strength : ''}${m.form ? ' (' + m.form + ')' : ''}`,
-        name: m.name
+      const meds = await medicationsApi.search(text);
+      setAcOpts(meds.map(m => ({
+        // value = what gets placed in the text field on select
+        value: [m.name, m.strength].filter(Boolean).join(' '),
+        label: [m.name, m.strength, m.form && `(${m.form})`].filter(Boolean).join(' '),
+        medicationId: m.id
       })));
     } catch { /* silent */ }
-    finally { setSearching(false); }
   };
 
-  const handleMedSelect = (val, option) => {
-    form.setFieldsValue({ medication_id: val, medication_name: option.name });
-  };
-
-  const handleMedSearch = (val) => {
-    form.setFieldsValue({ medication_name: val, medication_id: undefined });
+  // When user picks a suggestion, capture the linked medication id
+  const handleMedSelect = (_, option) => {
+    setMedIdRef(option.medicationId);
   };
 
   const handleSubmit = async () => {
@@ -51,15 +49,17 @@ export default function PrescriptionDrawer({ open, patientId, consultationId, on
       const rx = await prescriptionsApi.create({
         patient_id:      patientId,
         consultation_id: consultationId || undefined,
-        medication_id:   values.medication_id   || undefined,
-        medication_name: values.medication_name,
-        dosage:          values.dosage          || undefined,
-        frequency:       values.frequency       || undefined,
-        duration:        values.duration        || undefined,
-        instructions:    values.instructions    || undefined,
+        medication_id:   medIdRef || undefined,       // null if free-text entry
+        medication_name: values.medication_name.trim(),
+        dosage:          values.dosage       || undefined,
+        frequency:       values.frequency    || undefined,
+        duration:        values.duration     || undefined,
+        instructions:    values.instructions || undefined,
       });
       message.success(`${rx.medication_name} prescribed`);
       form.resetFields();
+      setMedIdRef(null);
+      setAcOpts([]);
       onAdded?.(rx);
       onClose();
     } catch (err) {
@@ -87,37 +87,30 @@ export default function PrescriptionDrawer({ open, patientId, consultationId, on
       destroyOnClose
     >
       <Form form={form} layout="vertical">
-        {/* Medication name — searchable autocomplete with free-text fallback */}
+        {/* AutoComplete: stores the drug name as plain text, supports free entry */}
         <Form.Item
           name="medication_name"
           label="Medication"
           rules={[{ required: true, message: 'Medication name is required' }]}
+          tooltip="Type to search the medication library, or enter any name directly"
         >
-          <Select
-            showSearch
-            allowClear
-            placeholder="Type medication name…"
-            filterOption={false}
-            onSearch={(v) => { searchMeds(v); handleMedSearch(v); }}
+          <AutoComplete
+            options={acOptions}
+            onSearch={handleMedSearch}
             onSelect={handleMedSelect}
-            loading={searching}
-            notFoundContent={null}
-            options={medOptions}
-            mode={undefined}
+            placeholder="e.g. Amoxicillin, Paracetamol 500mg…"
+            allowClear
+            onClear={() => { setMedIdRef(null); setAcOpts([]); }}
           />
         </Form.Item>
 
-        {/* Hidden medication_id for DB link */}
-        <Form.Item name="medication_id" hidden><Input /></Form.Item>
-
         <Form.Item name="dosage" label="Dosage">
-          <Input placeholder="e.g. 500mg, 10mg/5ml" />
+          <Input placeholder="e.g. 500mg, 10mg/5ml, 1 tablet" />
         </Form.Item>
 
         <Form.Item name="frequency" label="Frequency">
           <Select
-            showSearch
-            allowClear
+            showSearch allowClear
             placeholder="Select or type…"
             options={FREQ_OPTIONS.map(f => ({ value: f, label: f }))}
           />
@@ -125,15 +118,14 @@ export default function PrescriptionDrawer({ open, patientId, consultationId, on
 
         <Form.Item name="duration" label="Duration">
           <Select
-            showSearch
-            allowClear
+            showSearch allowClear
             placeholder="Select or type…"
             options={DUR_OPTIONS.map(d => ({ value: d, label: d }))}
           />
         </Form.Item>
 
-        <Form.Item name="instructions" label="Instructions / Notes">
-          <TextArea rows={3} placeholder="Take with food, avoid alcohol, etc." />
+        <Form.Item name="instructions" label="Special Instructions">
+          <TextArea rows={3} placeholder="Take with food, avoid direct sunlight, etc." />
         </Form.Item>
       </Form>
     </Drawer>

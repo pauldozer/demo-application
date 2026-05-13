@@ -31,6 +31,7 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
   const [consult, setConsult]   = useState(null);
   const [localId, setLocalId]   = useState(consultationId || null);
   const autoSaveTimer           = useRef(null);
+  const creationPromise         = useRef(null); // prevents duplicate draft creation
   const isNew                   = !consultationId;
 
   // ── Load existing consultation ──────────────────────
@@ -40,6 +41,7 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
     setConsult(null);
     form.resetFields();
     setSaveStatus('');
+    creationPromise.current = null;
 
     if (consultationId) {
       setLoading(true);
@@ -89,17 +91,22 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
     };
   }
 
-  // ── Create draft on first field change (new consult) ─
+  // ── Create draft (idempotent — concurrent calls share one promise) ──
   const ensureCreated = useCallback(async () => {
     if (localId) return localId;
-    const values = form.getFieldsValue();
-    const created = await consultationsApi.create({
-      patient_id: patientId,
-      ...flattenValues(values)
-    });
-    setLocalId(created.id);
-    setConsult(created);
-    return created.id;
+    // If a creation is already in flight, wait for it instead of creating a second draft
+    if (!creationPromise.current) {
+      const values = form.getFieldsValue();
+      creationPromise.current = consultationsApi
+        .create({ patient_id: patientId, ...flattenValues(values) })
+        .then(created => {
+          setLocalId(created.id);
+          setConsult(created);
+          return created.id;
+        })
+        .finally(() => { creationPromise.current = null; });
+    }
+    return creationPromise.current;
   }, [localId, patientId, form]);
 
   const handleChange = useCallback(() => {
@@ -114,11 +121,9 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
       const id = await ensureCreated();
       const values = form.getFieldsValue();
       const saved = await consultationsApi.update(id, flattenValues(values));
-      setConsult(saved);
-      setSaveStatus('saved');
-      setTimeout(() => setSaveStatus(''), 4000);
       message.success('Draft saved');
       onSaved?.(saved, false);
+      onClose(); // close so list refreshes cleanly; reopen via "Continue"
     } catch (err) {
       message.error(err.response?.data?.error || 'Failed to save');
     } finally {

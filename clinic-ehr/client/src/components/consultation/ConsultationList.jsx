@@ -92,7 +92,7 @@ export default function ConsultationList({ patientId }) {
                       {c.status === 'complete' ? 'Complete' : 'Draft'}
                     </Tag>
                     <Text type="secondary" style={{ fontSize: 12 }}>
-                      Dr. {c.doctor_name}
+                      {c.doctor_name}
                     </Text>
                   </Space>
                 }

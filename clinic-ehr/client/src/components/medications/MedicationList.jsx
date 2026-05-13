@@ -81,7 +81,7 @@ export default function MedicationList({ patientId }) {
               <Text style={{ fontSize: 12, color: '#888' }}>{rx.instructions}</Text>
             )}
             <Text style={{ fontSize: 11, color: '#bbb' }}>
-              Prescribed {dayjs(rx.prescribed_at).format('DD/MM/YYYY')} by Dr. {rx.doctor_name}
+              Prescribed {dayjs(rx.prescribed_at).format('DD/MM/YYYY')} by {rx.doctor_name}
               {rx.stopped_at && ` · Stopped ${dayjs(rx.stopped_at).format('DD/MM/YYYY')}`}
             </Text>
           </Space>

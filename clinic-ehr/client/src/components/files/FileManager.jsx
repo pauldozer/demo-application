@@ -146,10 +146,7 @@ export default function FileManager({ patientId }) {
       dataIndex: 'uploaded_at',
       width: 110,
       render: (v) => (
-        <div>
-          <div style={{ fontSize: 13 }}>{dayjs(v).format('DD/MM/YYYY')}</div>
-          <Text type="secondary" style={{ fontSize: 11 }}>{r => r.uploaded_by_name}</Text>
-        </div>
+        <Text style={{ fontSize: 13 }}>{dayjs(v).format('DD/MM/YYYY')}</Text>
       )
     },
     {

@@ -15,7 +15,8 @@ const ALLOWED_EXTS = new Set(['.pdf','.jpg','.jpeg','.png','.tiff','.tif','.gif'
 
 const storage = multer.diskStorage({
   destination(req, file, cb) {
-    const patientId = req.body.patient_id;
+    // Query param is available before body is fully parsed; body fields may not be yet
+    const patientId = req.query.patient_id || req.body.patient_id;
     if (!patientId) return cb(new Error('patient_id required'));
     const now   = new Date();
     const year  = String(now.getFullYear());
@@ -46,7 +47,8 @@ router.use(verifyToken);
 router.post('/upload', upload.single('file'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-  const { patient_id, consultation_id, file_type, category, description } = req.body;
+  const patient_id = req.query.patient_id || req.body.patient_id;
+  const { consultation_id, file_type, category, description } = req.body;
 
   // Build storage_path relative to DATA_DIR for portability
   const storagePath = path.relative(DATA_DIR, req.file.path);
