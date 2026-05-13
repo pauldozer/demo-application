@@ -28,8 +28,11 @@ const PatientService = {
       return { data: data.rows, total: count.rows[0].total };
     }
 
-    const likeQ    = `%${q}%`;
-    const phoneQ   = `%${q.replace(/\D/g, '')}%`;
+    const likeQ      = `%${q}%`;
+    const digitsOnly = q.replace(/\D/g, '');
+    // Pass null when query has no digits so the $3 IS NOT NULL guard skips phone matching.
+    // An empty digit string would become "%%" and match every phone number.
+    const phoneQ     = digitsOnly.length > 0 ? `%${digitsOnly}%` : null;
 
     const searchSQL = `
       SELECT ${SELECT_COLS}
@@ -38,7 +41,7 @@ const PatientService = {
         full_name ILIKE $2
         OR full_name_en ILIKE $2
         OR patient_number ILIKE $2
-        OR (phone IS NOT NULL AND phone LIKE $3)
+        OR ($3::text IS NOT NULL AND phone IS NOT NULL AND regexp_replace(phone, '[^0-9]', '', 'g') LIKE $3)
         OR to_tsvector('simple', full_name) @@ plainto_tsquery('simple', $1)
         OR (full_name_en IS NOT NULL
             AND to_tsvector('simple', full_name_en) @@ plainto_tsquery('simple', $1))
@@ -58,7 +61,7 @@ const PatientService = {
         full_name ILIKE $2
         OR full_name_en ILIKE $2
         OR patient_number ILIKE $2
-        OR (phone IS NOT NULL AND phone LIKE $3)
+        OR ($3::text IS NOT NULL AND phone IS NOT NULL AND regexp_replace(phone, '[^0-9]', '', 'g') LIKE $3)
         OR to_tsvector('simple', full_name) @@ plainto_tsquery('simple', $1)
         OR (full_name_en IS NOT NULL
             AND to_tsvector('simple', full_name_en) @@ plainto_tsquery('simple', $1))
@@ -74,8 +77,13 @@ const PatientService = {
 
   async getById(id) {
     const { rows } = await pool.query(
-      `SELECT p.${SELECT_COLS.replace(/\n/g, ' ')},
-              u.name AS created_by_name
+      `SELECT
+         p.id, p.patient_number, p.full_name, p.full_name_en, p.dob, p.gender,
+         p.phone, p.phone_alt, p.address, p.blood_type,
+         p.allergies, p.chronic_conditions, p.notes,
+         p.created_by, p.created_at, p.updated_at,
+         EXTRACT(YEAR FROM AGE(p.dob))::int AS age,
+         u.name AS created_by_name
        FROM patients p
        LEFT JOIN users u ON p.created_by = u.id
        WHERE p.id = $1`,

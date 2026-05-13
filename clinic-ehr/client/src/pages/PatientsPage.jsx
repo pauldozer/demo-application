@@ -88,10 +88,10 @@ export default function PatientsPage() {
           >
             {r.full_name.charAt(0).toUpperCase()}
           </Avatar>
-          <div>
-            <div style={{ fontWeight: 500, lineHeight: 1.3 }}>{r.full_name}</div>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontWeight: 500, lineHeight: 1.3, whiteSpace: 'nowrap' }}>{r.full_name}</div>
             {r.full_name_en && (
-              <Text type="secondary" style={{ fontSize: 12 }}>{r.full_name_en}</Text>
+              <Text type="secondary" style={{ fontSize: 12, whiteSpace: 'nowrap' }}>{r.full_name_en}</Text>
             )}
           </div>
         </Space>
