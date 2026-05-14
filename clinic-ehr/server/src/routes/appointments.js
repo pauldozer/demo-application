@@ -12,11 +12,11 @@ async function broadcastQueue(req, date) {
   io.emit('queue:updated', { date, queue });
 }
 
-// ── GET /api/appointments?date=&doctor_id=&patient_id= ──
+// ── GET /api/appointments?date=&from=&to=&doctor_id=&patient_id= ──
 router.get('/', async (req, res) => {
   try {
-    const { date, doctor_id, patient_id } = req.query;
-    const rows = await AppointmentService.list({ date, doctorId: doctor_id, patientId: patient_id });
+    const { date, from, to, doctor_id, patient_id } = req.query;
+    const rows = await AppointmentService.list({ date, from, to, doctorId: doctor_id, patientId: patient_id });
     res.json(rows);
   } catch (err) {
     console.error(err);

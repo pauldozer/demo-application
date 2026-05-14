@@ -11,11 +11,24 @@ const { Option }   = Select;
 
 const BLOOD_TYPES = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-'];
 
-const COMMON_ALLERGIES   = ['Penicillin', 'Aspirin', 'Ibuprofen', 'Sulfa', 'Codeine',
-                             'Latex', 'Peanuts', 'Shellfish', 'Contrast dye'];
-const COMMON_CONDITIONS  = ['Hypertension', 'Diabetes Type 1', 'Diabetes Type 2',
-                             'Asthma', 'COPD', 'Hypothyroidism', 'Hyperthyroidism',
-                             'Heart disease', 'CKD', 'Epilepsy', 'Depression', 'Anxiety'];
+const COMMON_ALLERGIES  = [
+  'Penicillin', 'Amoxicillin', 'Aspirin', 'Ibuprofen', 'Sulfa drugs', 'Codeine',
+  'Latex', 'Peanuts', 'Tree nuts', 'Shellfish', 'Eggs', 'Milk',
+  'Contrast dye', 'Iodine', 'Other',
+];
+const COMMON_CONDITIONS = [
+  'Hypertension', 'Diabetes Type 1', 'Diabetes Type 2', 'Hyperlipidemia',
+  'Asthma', 'COPD', 'Hypothyroidism', 'Hyperthyroidism',
+  'Heart disease / CAD', 'Heart failure', 'Atrial fibrillation',
+  'CKD', 'Epilepsy', 'Stroke / TIA', 'Depression', 'Anxiety',
+  'GERD', 'Obesity', 'Anemia', 'Other',
+];
+const COMMON_SURGERIES  = [
+  'Appendectomy', 'Cholecystectomy', 'C-section', 'Tonsillectomy',
+  'Hernia repair', 'Knee replacement', 'Hip replacement',
+  'CABG', 'Hysterectomy', 'Thyroidectomy', 'Prostatectomy',
+  'Cataract surgery', 'Spinal surgery', 'Other',
+];
 
 export default function PatientForm({ open, patient, onSuccess, onCancel }) {
   const [form]  = Form.useForm();
@@ -171,6 +184,20 @@ export default function PatientForm({ open, patient, onSuccess, onCancel }) {
             placeholder="Add conditions — type or choose from list"
             tokenSeparators={[',']}
             options={COMMON_CONDITIONS.map(c => ({ value: c, label: c }))}
+            allowClear
+          />
+        </Form.Item>
+
+        <Form.Item
+          name="past_surgical_history"
+          label="Past Surgical History"
+          tooltip="Type any surgery and press Enter, or pick from common ones."
+        >
+          <Select
+            mode="tags"
+            placeholder="Add surgeries — type or choose from list"
+            tokenSeparators={[',']}
+            options={COMMON_SURGERIES.map(s => ({ value: s, label: s }))}
             allowClear
           />
         </Form.Item>

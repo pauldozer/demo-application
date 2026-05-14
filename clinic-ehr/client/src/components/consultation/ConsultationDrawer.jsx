@@ -1,10 +1,10 @@
 import React, { useEffect, useRef, useState, useCallback } from 'react';
 import {
   Drawer, Form, Input, DatePicker, Button, Space, Tag, Typography,
-  Divider, Row, Col, Select, App, Spin, Alert
+  Divider, Row, Col, Select, App, Spin, Alert, Popconfirm
 } from 'antd';
 import {
-  SaveOutlined, CheckCircleOutlined, ClockCircleOutlined, PrinterOutlined
+  SaveOutlined, CheckCircleOutlined, ClockCircleOutlined, PrinterOutlined, DeleteOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { consultationsApi } from '../../api/consultations.api';
@@ -187,7 +187,7 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
       extra={<SaveIndicator />}
       footer={
         <Space style={{ justifyContent: 'space-between', width: '100%' }}>
-          <div>
+          <Space>
             {localId && (
               <Button
                 icon={<PrinterOutlined />}
@@ -196,7 +196,27 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
                 Print
               </Button>
             )}
-          </div>
+            {localId && ['doctor','admin'].includes(user?.role) && (
+              <Popconfirm
+                title="Delete this consultation?"
+                description="This will permanently remove the consultation and its vitals."
+                onConfirm={async () => {
+                  try {
+                    await consultationsApi.delete(localId);
+                    message.success('Consultation deleted');
+                    onSaved?.();
+                    onClose();
+                  } catch (err) {
+                    message.error(err.response?.data?.error || 'Failed to delete');
+                  }
+                }}
+                okText="Delete"
+                okButtonProps={{ danger: true }}
+              >
+                <Button danger icon={<DeleteOutlined />}>Delete</Button>
+              </Popconfirm>
+            )}
+          </Space>
           {canEdit && (
           <Space>
             <Button onClick={onClose}>Close</Button>
@@ -288,11 +308,33 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
           <Row gutter={16}>
             <Col xs={24} sm={8}>
               <Form.Item name="follow_up_date" label="Follow-up Date">
-                <DatePicker
-                  format="DD/MM/YYYY"
-                  style={{ width: '100%' }}
-                  disabledDate={(d) => d?.isBefore(dayjs(), 'day')}
-                />
+                <div>
+                  <Space size={4} wrap style={{ marginBottom: 6 }}>
+                    {[
+                      { label: '2 wks',   n: 2,  unit: 'week' },
+                      { label: '1 month', n: 1,  unit: 'month' },
+                      { label: '3 months',n: 3,  unit: 'month' },
+                      { label: '1 year',  n: 1,  unit: 'year' },
+                    ].map(({ label, n, unit }) => (
+                      <Button
+                        key={label}
+                        size="small"
+                        type="dashed"
+                        disabled={isComplete && user?.role !== 'admin'}
+                        onClick={() => form.setFieldValue('follow_up_date', dayjs().add(n, unit))}
+                      >
+                        {label}
+                      </Button>
+                    ))}
+                  </Space>
+                  <DatePicker
+                    format="DD/MM/YYYY"
+                    style={{ width: '100%' }}
+                    disabledDate={(d) => d?.isBefore(dayjs(), 'day')}
+                    value={form.getFieldValue('follow_up_date')}
+                    onChange={(v) => form.setFieldValue('follow_up_date', v)}
+                  />
+                </div>
               </Form.Item>
             </Col>
             <Col xs={24} sm={16}>

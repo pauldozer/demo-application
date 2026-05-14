@@ -7,7 +7,8 @@ function buildPatientNumber(seq) {
 
 const SELECT_COLS = `
   id, patient_number, full_name, full_name_en, dob, gender,
-  phone, phone_alt, address, blood_type, allergies, chronic_conditions, notes,
+  phone, phone_alt, address, blood_type, allergies, chronic_conditions,
+  past_surgical_history, notes,
   created_by, created_at, updated_at,
   EXTRACT(YEAR FROM AGE(dob))::int AS age
 `;
@@ -106,8 +107,8 @@ const PatientService = {
         `INSERT INTO patients (
            patient_number, full_name, full_name_en, dob, gender,
            phone, phone_alt, address, blood_type,
-           allergies, chronic_conditions, notes, created_by
-         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)
+           allergies, chronic_conditions, past_surgical_history, notes, created_by
+         ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)
          RETURNING *,
            EXTRACT(YEAR FROM AGE(dob))::int AS age`,
         [
@@ -120,8 +121,9 @@ const PatientService = {
           data.phone_alt?.trim() || null,
           data.address?.trim()   || null,
           data.blood_type        || null,
-          data.allergies          || [],
-          data.chronic_conditions || [],
+          data.allergies              || [],
+          data.chronic_conditions     || [],
+          data.past_surgical_history  || [],
           data.notes?.trim()     || null,
           data.created_by
         ]
@@ -141,7 +143,7 @@ const PatientService = {
     const ALLOWED = [
       'full_name', 'full_name_en', 'dob', 'gender',
       'phone', 'phone_alt', 'address', 'blood_type',
-      'allergies', 'chronic_conditions', 'notes'
+      'allergies', 'chronic_conditions', 'past_surgical_history', 'notes'
     ];
 
     const setClauses = [];

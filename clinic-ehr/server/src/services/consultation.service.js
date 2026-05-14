@@ -181,6 +181,11 @@ const ConsultationService = {
       [id]
     );
     return rows[0];
+  },
+
+  async delete(id) {
+    // Vitals are deleted via CASCADE on consultation FK
+    await pool.query('DELETE FROM consultations WHERE id=$1', [id]);
   }
 };
 

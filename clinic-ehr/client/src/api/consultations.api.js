@@ -15,4 +15,7 @@ export const consultationsApi = {
 
   complete: (id, data = {}) =>
     api.put(`/consultations/${id}/complete`, data).then(r => r.data),
+
+  delete: (id) =>
+    api.delete(`/consultations/${id}`).then(r => r.data),
 };

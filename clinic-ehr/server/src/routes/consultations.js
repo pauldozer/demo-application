@@ -112,4 +112,30 @@ router.put('/:id/complete', requireRole('doctor', 'admin'), async (req, res) => 
   }
 });
 
+// ── DELETE /api/consultations/:id ────────────────────────
+router.delete('/:id', requireRole('doctor', 'admin'), async (req, res) => {
+  try {
+    const existing = await ConsultationService.getById(req.params.id);
+    if (!existing) return res.status(404).json({ error: 'Consultation not found' });
+
+    if (req.user.role === 'doctor' && existing.doctor_id !== req.user.id) {
+      return res.status(403).json({ error: 'You can only delete your own consultations' });
+    }
+
+    await ConsultationService.delete(req.params.id);
+
+    await auditLog({
+      userId: req.user.id, action: 'delete_consultation',
+      entityType: 'consultation', entityId: req.params.id,
+      oldValues: { status: existing.status, patient_id: existing.patient_id },
+      ipAddress: req.ip,
+    });
+
+    return res.json({ message: 'Consultation deleted' });
+  } catch (err) {
+    console.error('Delete consultation error:', err);
+    return res.status(500).json({ error: 'Server error' });
+  }
+});
+
 module.exports = router;

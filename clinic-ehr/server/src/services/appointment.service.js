@@ -16,7 +16,7 @@ const BASE_SELECT = `
 `;
 
 class AppointmentService {
-  async list({ date, doctorId, patientId, includeCompleted = true } = {}) {
+  async list({ date, from, to, doctorId, patientId, includeCompleted = true } = {}) {
     const conds = [];
     const params = [];
     let idx = 1;
@@ -24,6 +24,14 @@ class AppointmentService {
     if (date) {
       conds.push(`DATE(a.scheduled_at) = $${idx++}`);
       params.push(date);
+    }
+    if (from) {
+      conds.push(`a.scheduled_at >= $${idx++}::date`);
+      params.push(from);
+    }
+    if (to) {
+      conds.push(`a.scheduled_at < $${idx++}::date + interval '1 day'`);
+      params.push(to);
     }
     if (doctorId) {
       conds.push(`a.doctor_id = $${idx++}`);

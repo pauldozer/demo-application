@@ -7,6 +7,7 @@ import dayjs from 'dayjs';
 import { appointmentsApi } from '../../api/appointments.api';
 import { patientsApi }     from '../../api/patients.api';
 import { useAuth }         from '../../context/AuthContext';
+import BillingPanel        from '../billing/BillingPanel';
 
 const DURATIONS = [15, 20, 30, 45, 60].map(m => ({ value: m, label: `${m} min` }));
 const TYPES     = ['Follow-up', 'New Patient', 'Procedure', 'Consultation', 'Other'];
@@ -207,6 +208,14 @@ export default function AppointmentDrawer({ open, appointment, prefillDate, pref
           <Input.TextArea rows={3} placeholder="Additional notes…" />
         </Form.Item>
       </Form>
+
+      {/* Billing — shown only for existing appointments */}
+      {isEdit && appointment?.id && (
+        <BillingPanel
+          appointmentId={appointment.id}
+          readOnly={appointment?.status === 'completed' && user?.role === 'doctor'}
+        />
+      )}
     </Drawer>
   );
 }

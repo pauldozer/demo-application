@@ -1,16 +1,20 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
-  List, Button, Tag, Typography, Space, Badge, Select, Spin,
-  Empty, Popconfirm, Divider, App, Tooltip
+  List, Button, Tag, Typography, Space, Select, Spin,
+  Empty, Popconfirm, App, Tooltip
 } from 'antd';
 import {
   ReloadOutlined, CheckOutlined, UserOutlined,
-  ClockCircleOutlined, StopOutlined, WifiOutlined
+  ClockCircleOutlined, StopOutlined, WifiOutlined,
+  FileTextOutlined, DollarOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
-import { appointmentsApi } from '../api/appointments.api';
-import { useAuth }         from '../context/AuthContext';
-import { useSocket }       from '../context/SocketContext';
+import { appointmentsApi }  from '../api/appointments.api';
+import { billingApi }       from '../api/billing.api';
+import { useAuth }          from '../context/AuthContext';
+import { useSocket }        from '../context/SocketContext';
+import ConsultationDrawer   from '../components/consultation/ConsultationDrawer';
+import { BILLING_STATUS_TAG } from '../components/billing/BillingPanel';
 
 const { Text, Title } = Typography;
 
@@ -24,23 +28,37 @@ const STATUS_CFG = {
   no_show:     { color: 'red',     label: 'No Show',     icon: <StopOutlined /> },
 };
 
+const STATUS_OPTIONS = [
+  { value: 'scheduled',   label: 'Scheduled' },
+  { value: 'confirmed',   label: 'Confirmed' },
+  { value: 'arrived',     label: 'Arrived' },
+  { value: 'in_progress', label: 'With Doctor' },
+  { value: 'completed',   label: 'Done' },
+  { value: 'no_show',     label: 'No Show' },
+];
+
 function countByStatus(list, ...statuses) {
   return list.filter(a => statuses.includes(a.status)).length;
 }
 
 export default function QueuePage() {
-  const { user }          = useAuth();
-  const { socket, connected } = useSocket();
-  const { message }       = App.useApp();
-  const [queue, setQueue]   = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [doctors, setDoctors] = useState([]);
-  const [doctorId, setDoctorId] = useState(user?.role === 'doctor' ? user.id : null);
+  const { user }                  = useAuth();
+  const { socket, connected }     = useSocket();
+  const { message }               = App.useApp();
+  const [queue, setQueue]         = useState([]);
+  const [billingMap, setBilling]  = useState({});
+  const [loading, setLoading]     = useState(false);
+  const [doctors, setDoctors]     = useState([]);
+  const [doctorId, setDoctorId]   = useState(user?.role === 'doctor' ? user.id : null);
+  const [consultDrawer, setConsultDrawer] = useState({ open: false, patientId: null });
   const today = dayjs().format('YYYY-MM-DD');
 
+  const isDoctor    = user?.role === 'doctor';
+  const canEditFree = ['admin', 'assistant'].includes(user?.role);
+
   useEffect(() => {
-    appointmentsApi.doctors().then(setDoctors).catch(() => {});
-  }, []);
+    if (!isDoctor) appointmentsApi.doctors().then(setDoctors).catch(() => {});
+  }, [isDoctor]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -48,6 +66,13 @@ export default function QueuePage() {
       const data = await appointmentsApi.queue(today);
       const filtered = doctorId ? data.filter(a => a.doctor_id === doctorId) : data;
       setQueue(filtered);
+      // Load billing for each appointment
+      const billingResults = await Promise.all(
+        filtered.map(a => billingApi.getByAppointment(a.id).catch(() => null))
+      );
+      const map = {};
+      filtered.forEach((a, i) => { if (billingResults[i]) map[a.id] = billingResults[i]; });
+      setBilling(map);
     } catch {
       message.error('Failed to load queue');
     } finally {
@@ -57,7 +82,6 @@ export default function QueuePage() {
 
   useEffect(() => { load(); }, [load]);
 
-  // Real-time updates
   useEffect(() => {
     if (!socket) return;
     const handler = ({ date: d, queue: q }) => {
@@ -72,7 +96,6 @@ export default function QueuePage() {
   const setStatus = async (id, status) => {
     try {
       await appointmentsApi.updateStatus(id, status);
-      // Queue update comes via socket; do a local optimistic update too
       setQueue(q => q.map(a => a.id === id ? { ...a, status } : a));
     } catch (err) {
       message.error(err.response?.data?.error || 'Failed to update status');
@@ -88,9 +111,7 @@ export default function QueuePage() {
       {/* ── Header ── */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 20 }}>
         <Space wrap align="center">
-          <Title level={4} style={{ margin: 0 }}>
-            Today's Queue
-          </Title>
+          <Title level={4} style={{ margin: 0 }}>Today's Queue</Title>
           <Text type="secondary" style={{ fontSize: 13 }}>{dayjs().format('ddd, D MMM YYYY')}</Text>
           <Tooltip title={connected ? 'Live updates active' : 'Disconnected — refresh manually'}>
             <WifiOutlined style={{ color: connected ? '#52c41a' : '#ff4d4f', fontSize: 16 }} />
@@ -98,22 +119,23 @@ export default function QueuePage() {
         </Space>
 
         <Space wrap>
-          <Select
-            style={{ width: 200 }}
-            placeholder="All doctors"
-            allowClear={user?.role !== 'doctor'}
-            disabled={user?.role === 'doctor'}
-            value={doctorId || undefined}
-            onChange={(v) => setDoctorId(v ?? null)}
-            options={doctors.map(d => ({ value: d.id, label: d.name }))}
-          />
+          {!isDoctor && (
+            <Select
+              style={{ width: 200 }}
+              placeholder="All doctors"
+              allowClear
+              value={doctorId || undefined}
+              onChange={(v) => setDoctorId(v ?? null)}
+              options={doctors.map(d => ({ value: d.id, label: d.name }))}
+            />
+          )}
           <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
             Refresh
           </Button>
         </Space>
       </div>
 
-      {/* ── Stats row ── */}
+      {/* ── Stats ── */}
       <div style={{ display: 'flex', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
         {[
           { label: 'Waiting',     count: waiting,    color: '#1677ff' },
@@ -123,9 +145,8 @@ export default function QueuePage() {
           <div key={label} style={{
             flex: 1, minWidth: 100, background: '#fff', borderRadius: 8,
             padding: '12px 20px', border: '1px solid #f0f0f0',
-            display: 'flex', flexDirection: 'column', gap: 2
           }}>
-            <Text style={{ fontSize: 28, fontWeight: 700, color, lineHeight: 1 }}>{count}</Text>
+            <Text style={{ fontSize: 28, fontWeight: 700, color, lineHeight: 1, display: 'block' }}>{count}</Text>
             <Text type="secondary" style={{ fontSize: 12 }}>{label}</Text>
           </div>
         ))}
@@ -141,7 +162,8 @@ export default function QueuePage() {
           dataSource={queue}
           renderItem={(appt) => {
             const s = STATUS_CFG[appt.status] || STATUS_CFG.scheduled;
-            const isActive = !['completed','cancelled','no_show'].includes(appt.status);
+            const isTerminal = ['completed', 'cancelled', 'no_show'].includes(appt.status);
+            const billing    = billingMap[appt.id];
 
             return (
               <List.Item
@@ -161,6 +183,7 @@ export default function QueuePage() {
                       <Text type="secondary" style={{ fontSize: 12 }}>{appt.patient_number}</Text>
                       <Tag color={s.color}>{s.icon} {s.label}</Tag>
                       {appt.type && <Tag>{appt.type}</Tag>}
+                      {billing && BILLING_STATUS_TAG[billing.payment_status]}
                     </Space>
                   }
                   description={
@@ -172,68 +195,97 @@ export default function QueuePage() {
                           Checked in {dayjs(appt.check_in_time).format('HH:mm')}
                         </Text>
                       )}
-                      {appt.notes && (
-                        <Text type="secondary" style={{ fontStyle: 'italic' }}>{appt.notes}</Text>
+                      {billing?.fee_type === 'free' && <Text type="secondary"><DollarOutlined /> Free</Text>}
+                      {billing?.fee_amount && billing?.fee_type !== 'free' && (
+                        <Text type="secondary">
+                          <DollarOutlined /> {billing.fee_type === 'discounted'
+                            ? `${billing.fee_amount - (billing.discount_amount || 0)} LL`
+                            : `${billing.fee_amount} LL`}
+                        </Text>
                       )}
+                      {appt.notes && <Text type="secondary" style={{ fontStyle: 'italic' }}>{appt.notes}</Text>}
                     </Space>
                   }
                 />
 
-                {/* ── Action buttons ── */}
-                {isActive && (
-                  <Space wrap style={{ marginLeft: 16 }}>
-                    {['scheduled','confirmed'].includes(appt.status) && (
-                      <Button
-                        size="small"
-                        type="primary"
-                        icon={<UserOutlined />}
-                        onClick={() => setStatus(appt.id, 'arrived')}
-                      >
-                        Check In
-                      </Button>
-                    )}
+                {/* ── Actions ── */}
+                <Space wrap style={{ marginLeft: 16 }}>
+                  {/* ADMIN/ASSISTANT: free status dropdown */}
+                  {canEditFree && !isTerminal && (
+                    <Select
+                      size="small"
+                      value={appt.status}
+                      style={{ width: 130 }}
+                      options={STATUS_OPTIONS.filter(o => o.value !== 'cancelled')}
+                      onChange={(v) => setStatus(appt.id, v)}
+                    />
+                  )}
 
-                    {appt.status === 'arrived' && (
-                      <Button
-                        size="small"
-                        type="primary"
-                        style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                        icon={<CheckOutlined />}
-                        onClick={() => setStatus(appt.id, 'in_progress')}
-                      >
-                        Start
-                      </Button>
-                    )}
+                  {/* DOCTOR: forward-only buttons */}
+                  {isDoctor && !isTerminal && (
+                    <>
+                      {['scheduled', 'confirmed'].includes(appt.status) && (
+                        <Button size="small" type="primary" icon={<UserOutlined />}
+                          onClick={() => setStatus(appt.id, 'arrived')}>
+                          Check In
+                        </Button>
+                      )}
+                      {appt.status === 'arrived' && (
+                        <Button size="small" type="primary"
+                          style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                          icon={<CheckOutlined />}
+                          onClick={() => setStatus(appt.id, 'in_progress')}>
+                          Start
+                        </Button>
+                      )}
+                      {appt.status === 'in_progress' && (
+                        <Button size="small" type="primary"
+                          style={{ background: '#8c8c8c', borderColor: '#8c8c8c' }}
+                          icon={<CheckOutlined />}
+                          onClick={() => setStatus(appt.id, 'completed')}>
+                          Done
+                        </Button>
+                      )}
+                    </>
+                  )}
 
-                    {appt.status === 'in_progress' && (
-                      <Button
-                        size="small"
-                        type="primary"
-                        style={{ background: '#8c8c8c', borderColor: '#8c8c8c' }}
-                        icon={<CheckOutlined />}
-                        onClick={() => setStatus(appt.id, 'completed')}
-                      >
-                        Done
-                      </Button>
-                    )}
+                  {/* DOCTOR: open consultation when patient has arrived */}
+                  {isDoctor && ['arrived', 'in_progress'].includes(appt.status) && (
+                    <Button
+                      size="small"
+                      icon={<FileTextOutlined />}
+                      onClick={() => setConsultDrawer({ open: true, patientId: appt.patient_id })}
+                    >
+                      Open Consultation
+                    </Button>
+                  )}
 
-                    {['scheduled','confirmed','arrived'].includes(appt.status) && (
-                      <Popconfirm
-                        title="Mark as no-show?"
-                        onConfirm={() => setStatus(appt.id, 'no_show')}
-                        okText="Yes"
-                        okButtonProps={{ danger: true }}
-                      >
-                        <Button size="small" icon={<StopOutlined />}>No Show</Button>
-                      </Popconfirm>
-                    )}
-                  </Space>
-                )}
+                  {/* Cancel — admin/assistant only */}
+                  {canEditFree && !isTerminal && (
+                    <Popconfirm
+                      title="Cancel this appointment?"
+                      onConfirm={() => setStatus(appt.id, 'cancelled')}
+                      okText="Yes, cancel"
+                      okButtonProps={{ danger: true }}
+                    >
+                      <Button size="small" danger>Cancel</Button>
+                    </Popconfirm>
+                  )}
+                </Space>
               </List.Item>
             );
           }}
         />
       )}
+
+      {/* Consultation drawer triggered from queue */}
+      <ConsultationDrawer
+        open={consultDrawer.open}
+        patientId={consultDrawer.patientId}
+        consultationId={null}
+        onClose={() => setConsultDrawer({ open: false, patientId: null })}
+        onSaved={() => {}}
+      />
     </div>
   );
 }

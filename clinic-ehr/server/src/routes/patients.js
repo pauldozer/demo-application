@@ -42,6 +42,7 @@ router.post('/', [
   body('phone_alt').optional({ nullable: true }).trim(),
   body('allergies').optional().isArray(),
   body('chronic_conditions').optional().isArray(),
+  body('past_surgical_history').optional().isArray(),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {

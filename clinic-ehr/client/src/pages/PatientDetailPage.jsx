@@ -2,15 +2,16 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Card, Tabs, Descriptions, Tag, Button, Space,
-  Typography, Skeleton, Alert, Avatar, Row, Col, App
+  Typography, Skeleton, Alert, Avatar, Row, Col, App, Popconfirm
 } from 'antd';
 import {
   ArrowLeftOutlined, EditOutlined, AlertOutlined,
   HeartOutlined, FileTextOutlined, MedicineBoxOutlined,
-  FolderOpenOutlined
+  FolderOpenOutlined, DeleteOutlined, ScissorOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { patientsApi }       from '../api/patients.api';
+import { useAuth }           from '../context/AuthContext';
 import PatientForm           from '../components/patients/PatientForm';
 import ConsultationList      from '../components/consultation/ConsultationList';
 import MedicationList        from '../components/medications/MedicationList';
@@ -24,10 +25,12 @@ const GENDER_COLOR = { male: 'blue', female: 'magenta', other: 'default' };
 export default function PatientDetailPage() {
   const { id }          = useParams();
   const navigate        = useNavigate();
+  const { user }        = useAuth();
   const { message }     = App.useApp();
   const [patient, setP] = useState(null);
   const [loading, setL] = useState(true);
   const [showEdit, setE] = useState(false);
+  const [deleting, setD] = useState(false);
 
   const loadPatient = async () => {
     try {
@@ -42,8 +45,22 @@ export default function PatientDetailPage() {
 
   useEffect(() => { loadPatient(); }, [id]); // eslint-disable-line
 
+  const handleDelete = async () => {
+    setD(true);
+    try {
+      await patientsApi.delete(id);
+      message.success('Patient record permanently deleted');
+      navigate('/patients');
+    } catch {
+      message.error('Failed to delete patient');
+      setD(false);
+    }
+  };
+
   if (loading) return <Skeleton active paragraph={{ rows: 10 }} />;
   if (!patient) return null;
+
+  const isAssistant = user?.role === 'assistant';
 
   const tabs = [
     {
@@ -113,6 +130,7 @@ export default function PatientDetailPage() {
             <Card
               title={<Space><HeartOutlined style={{ color: '#fa8c16' }} />Chronic Conditions</Space>}
               size="small"
+              style={{ marginBottom: 12 }}
             >
               {patient.chronic_conditions?.length
                 ? <Space wrap size={[6, 6]}>
@@ -121,8 +139,20 @@ export default function PatientDetailPage() {
                 : <Text type="secondary">No chronic conditions</Text>}
             </Card>
 
+            <Card
+              title={<Space><ScissorOutlined style={{ color: '#722ed1' }} />Past Surgical History</Space>}
+              size="small"
+              style={{ marginBottom: 12 }}
+            >
+              {patient.past_surgical_history?.length
+                ? <Space wrap size={[6, 6]}>
+                    {patient.past_surgical_history.map((s, i) => <Tag key={i} color="purple">{s}</Tag>)}
+                  </Space>
+                : <Text type="secondary">No surgical history recorded</Text>}
+            </Card>
+
             {patient.notes && (
-              <Card title="Notes" size="small" style={{ marginTop: 12 }}>
+              <Card title="Notes" size="small">
                 <Text style={{ whiteSpace: 'pre-wrap' }}>{patient.notes}</Text>
               </Card>
             )}
@@ -130,16 +160,19 @@ export default function PatientDetailPage() {
         </Row>
       )
     },
-    {
-      key: 'consultations',
-      label: <Space><FileTextOutlined />Consultations</Space>,
-      children: <ConsultationList patientId={id} />
-    },
-    {
-      key: 'medications',
-      label: <Space><MedicineBoxOutlined />Medications</Space>,
-      children: <MedicationList patientId={id} />
-    },
+    // Consultations and Medications are hidden from assistants
+    ...(!isAssistant ? [
+      {
+        key: 'consultations',
+        label: <Space><FileTextOutlined />Consultations</Space>,
+        children: <ConsultationList patientId={id} />
+      },
+      {
+        key: 'medications',
+        label: <Space><MedicineBoxOutlined />Medications</Space>,
+        children: <MedicationList patientId={id} />
+      },
+    ] : []),
     {
       key: 'files',
       label: <Space><FolderOpenOutlined />Files & Labs</Space>,
@@ -180,7 +213,23 @@ export default function PatientDetailPage() {
           </Space>
         </div>
 
-        <Button icon={<EditOutlined />} onClick={() => setE(true)}>Edit Patient</Button>
+        <Space>
+          <Button icon={<EditOutlined />} onClick={() => setE(true)}>Edit</Button>
+          {user?.role === 'admin' && (
+            <Popconfirm
+              title="Permanently delete this patient?"
+              description="This will remove all consultations, files, and medical records. This cannot be undone."
+              onConfirm={handleDelete}
+              okText="Delete permanently"
+              okButtonProps={{ danger: true, loading: deleting }}
+              cancelText="Cancel"
+            >
+              <Button danger icon={<DeleteOutlined />} loading={deleting}>
+                Delete Patient
+              </Button>
+            </Popconfirm>
+          )}
+        </Space>
       </div>
 
       {/* ── Allergy banner ── */}
