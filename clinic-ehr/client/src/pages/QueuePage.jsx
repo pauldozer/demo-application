@@ -167,16 +167,43 @@ export default function QueuePage() {
             const isActive = !['completed', 'cancelled', 'no_show'].includes(appt.status);
             const billing  = billingMap[appt.id];
 
+            // Net fee calculation
+            const netFee = billing
+              ? billing.fee_type === 'free' ? 0
+              : billing.fee_type === 'discounted'
+                ? parseFloat(billing.fee_amount || 0) - parseFloat(billing.discount_amount || 0)
+                : parseFloat(billing.fee_amount || 0)
+              : null;
+
+            const fmtUSD = (n) => `$${parseFloat(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+            const quickBillingAction = async (payStatus, feeType) => {
+              try {
+                const updated = await billingApi.upsert({
+                  appointment_id: appt.id,
+                  fee_type:        feeType  ?? billing?.fee_type ?? 'full',
+                  fee_amount:      billing?.fee_amount ?? null,
+                  discount_amount: billing?.discount_amount ?? null,
+                  payment_status:  payStatus,
+                });
+                setBilling(prev => ({ ...prev, [appt.id]: updated }));
+              } catch {
+                message.error('Failed to update billing');
+              }
+            };
+
             return (
               <List.Item
                 style={{
                   background: '#fff', borderRadius: 8, marginBottom: 8,
                   padding: '12px 16px', border: '1px solid #f0f0f0',
                   opacity: appt.status === 'cancelled' ? 0.5 : 1,
+                  flexDirection: 'column', alignItems: 'stretch',
                 }}
               >
-                <List.Item.Meta
-                  title={
+                {/* ── Top row: patient info + actions ── */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 8 }}>
+                  <div style={{ flex: 1 }}>
                     <Space wrap>
                       <Text strong style={{ fontSize: 15 }}>
                         {dayjs(appt.scheduled_at).format('HH:mm')}
@@ -185,83 +212,119 @@ export default function QueuePage() {
                       <Text type="secondary" style={{ fontSize: 12 }}>{appt.patient_number}</Text>
                       <Tag color={s.color}>{s.icon} {s.label}</Tag>
                       {appt.type && <Tag>{appt.type}</Tag>}
-                      {billing && BILLING_STATUS_TAG[billing.payment_status]}
                     </Space>
-                  }
-                  description={
-                    <Space size={16} style={{ fontSize: 12, flexWrap: 'wrap' }}>
-                      <Text type="secondary">{appt.doctor_name}</Text>
-                      <Text type="secondary">{appt.duration_mins}min</Text>
-                      {appt.check_in_time && (
-                        <Text type="secondary">
-                          Checked in {dayjs(appt.check_in_time).format('HH:mm')}
-                        </Text>
-                      )}
-                      {billing?.fee_type === 'free' && <Text type="secondary"><DollarOutlined /> Free</Text>}
-                      {billing?.fee_amount && billing?.fee_type !== 'free' && (
-                        <Text type="secondary">
-                          <DollarOutlined /> {billing.fee_type === 'discounted'
-                            ? `${billing.fee_amount - (billing.discount_amount || 0)} LL`
-                            : `${billing.fee_amount} LL`}
-                        </Text>
-                      )}
-                      {appt.notes && <Text type="secondary" style={{ fontStyle: 'italic' }}>{appt.notes}</Text>}
-                    </Space>
-                  }
-                />
+                    <div style={{ marginTop: 4 }}>
+                      <Space size={16} style={{ fontSize: 12 }}>
+                        <Text type="secondary">{appt.doctor_name}</Text>
+                        <Text type="secondary">{appt.duration_mins}min</Text>
+                        {appt.check_in_time && (
+                          <Text type="secondary">In {dayjs(appt.check_in_time).format('HH:mm')}</Text>
+                        )}
+                        {appt.notes && <Text type="secondary" style={{ fontStyle: 'italic' }}>{appt.notes}</Text>}
+                      </Space>
+                    </div>
+                  </div>
 
-                {/* ── Actions ── */}
-                <Space wrap style={{ marginLeft: 16 }}>
-                  {/* ADMIN/ASSISTANT: full status dropdown — always reversible */}
-                  {canEditFree && (
-                    <Select
-                      size="small"
-                      value={appt.status}
-                      style={{ width: 130 }}
-                      options={STATUS_OPTIONS}
-                      onChange={(v) => setStatus(appt.id, v)}
-                    />
+                  {/* Status + workflow actions */}
+                  <Space wrap>
+                    {canEditFree && (
+                      <Select size="small" value={appt.status} style={{ width: 130 }}
+                        options={STATUS_OPTIONS} onChange={(v) => setStatus(appt.id, v)} />
+                    )}
+                    {isDoctor && isActive && (
+                      <>
+                        {['scheduled','confirmed'].includes(appt.status) && (
+                          <Button size="small" type="primary" icon={<UserOutlined />}
+                            onClick={() => setStatus(appt.id, 'arrived')}>Check In</Button>
+                        )}
+                        {appt.status === 'arrived' && (
+                          <Button size="small" type="primary"
+                            style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                            icon={<CheckOutlined />} onClick={() => setStatus(appt.id, 'in_progress')}>Start</Button>
+                        )}
+                        {appt.status === 'in_progress' && (
+                          <Button size="small" type="primary"
+                            style={{ background: '#8c8c8c', borderColor: '#8c8c8c' }}
+                            icon={<CheckOutlined />} onClick={() => setStatus(appt.id, 'completed')}>Done</Button>
+                        )}
+                      </>
+                    )}
+                    {isDoctor && ['arrived','in_progress'].includes(appt.status) && (
+                      <Button size="small" icon={<FileTextOutlined />}
+                        onClick={() => setConsultDrawer({ open: true, patientId: appt.patient_id })}>
+                        Consultation
+                      </Button>
+                    )}
+                  </Space>
+                </div>
+
+                {/* ── Billing row — always visible ── */}
+                <div style={{
+                  marginTop: 10, paddingTop: 8,
+                  borderTop: '1px dashed #f0f0f0',
+                  display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap'
+                }}>
+                  <DollarOutlined style={{ color: '#52c41a', fontSize: 14 }} />
+
+                  {/* Fee amount display */}
+                  {!billing && (
+                    <Text type="secondary" style={{ fontSize: 12 }}>No fee set</Text>
+                  )}
+                  {billing?.fee_type === 'free' && (
+                    <Tag color="default">Free</Tag>
+                  )}
+                  {billing && billing.fee_type !== 'free' && netFee !== null && (
+                    <Text strong style={{ fontSize: 13 }}>{fmtUSD(netFee)}</Text>
                   )}
 
-                  {/* DOCTOR: forward-only buttons */}
-                  {isDoctor && isActive && (
-                    <>
-                      {['scheduled', 'confirmed'].includes(appt.status) && (
-                        <Button size="small" type="primary" icon={<UserOutlined />}
-                          onClick={() => setStatus(appt.id, 'arrived')}>
-                          Check In
-                        </Button>
-                      )}
-                      {appt.status === 'arrived' && (
-                        <Button size="small" type="primary"
-                          style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                          icon={<CheckOutlined />}
-                          onClick={() => setStatus(appt.id, 'in_progress')}>
-                          Start
-                        </Button>
-                      )}
-                      {appt.status === 'in_progress' && (
-                        <Button size="small" type="primary"
-                          style={{ background: '#8c8c8c', borderColor: '#8c8c8c' }}
-                          icon={<CheckOutlined />}
-                          onClick={() => setStatus(appt.id, 'completed')}>
-                          Done
-                        </Button>
-                      )}
-                    </>
+                  {/* Payment status badge */}
+                  {billing?.payment_status === 'paid' && (
+                    <Tag color="green" style={{ fontWeight: 600 }}>✓ Paid</Tag>
+                  )}
+                  {billing?.payment_status === 'waived' && (
+                    <Tag color="default">Waived</Tag>
+                  )}
+                  {billing?.payment_status === 'pending' && billing?.fee_type !== 'free' && (
+                    <Tag color="orange">Pending</Tag>
                   )}
 
-                  {/* DOCTOR: open consultation when patient has arrived */}
-                  {isDoctor && ['arrived', 'in_progress'].includes(appt.status) && (
-                    <Button
-                      size="small"
-                      icon={<FileTextOutlined />}
-                      onClick={() => setConsultDrawer({ open: true, patientId: appt.patient_id })}
-                    >
-                      Open Consultation
+                  {/* Quick actions — for pending/no-billing situations */}
+                  {(!billing || billing.payment_status === 'pending') && billing?.fee_type !== 'free' && (
+                    <Space size={6}>
+                      <Button
+                        size="small"
+                        type="primary"
+                        style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                        onClick={() => quickBillingAction('paid')}
+                      >
+                        Mark Paid
+                      </Button>
+                      <Tooltip title="Doctor waived the fee for this patient">
+                        <Button
+                          size="small"
+                          onClick={() => quickBillingAction('waived')}
+                        >
+                          Waive
+                        </Button>
+                      </Tooltip>
+                      <Button
+                        size="small"
+                        onClick={() => quickBillingAction('paid', 'free')}
+                        style={{ color: '#8c8c8c' }}
+                      >
+                        Free
+                      </Button>
+                    </Space>
+                  )}
+
+                  {/* Allow reverting paid back to pending */}
+                  {billing?.payment_status === 'paid' && (
+                    <Button size="small" type="text" style={{ color: '#bfbfbf', fontSize: 11 }}
+                      onClick={() => quickBillingAction('pending')}>
+                      Undo
                     </Button>
                   )}
-                </Space>
+                </div>
               </List.Item>
             );
           }}

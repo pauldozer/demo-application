@@ -101,7 +101,7 @@ export default function BillingPanel({ appointmentId, readOnly = false }) {
           <Space>
             <div>
               <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                {feeType === 'discounted' ? 'Original Amount' : 'Amount'} (LL)
+                {feeType === 'discounted' ? 'Original Amount' : 'Amount'} ($)
               </Text>
               <InputNumber
                 value={feeAmount}
@@ -116,7 +116,7 @@ export default function BillingPanel({ appointmentId, readOnly = false }) {
             {feeType === 'discounted' && (
               <div>
                 <Text type="secondary" style={{ fontSize: 12, display: 'block', marginBottom: 4 }}>
-                  Discount (LL)
+                  Discount ($)
                 </Text>
                 <InputNumber
                   value={discount}

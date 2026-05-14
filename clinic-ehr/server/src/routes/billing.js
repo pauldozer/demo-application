@@ -6,6 +6,20 @@ const BillingService  = require('../services/billing.service');
 const router = express.Router();
 router.use(verifyToken);
 
+// GET /api/billing/revenue?doctor_id=  (must be before /:appointmentId)
+router.get('/revenue', async (req, res) => {
+  try {
+    const { doctor_id } = req.query;
+    // Doctors can only see their own revenue
+    const effectiveDoctorId = req.user.role === 'doctor' ? req.user.id : (doctor_id || null);
+    const data = await BillingService.getRevenue(effectiveDoctorId);
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
+
 // GET /api/billing/:appointmentId
 router.get('/:appointmentId', async (req, res) => {
   try {
