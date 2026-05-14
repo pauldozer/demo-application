@@ -12,10 +12,10 @@ const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
 
 const NAV_ITEMS = [
-  { key: '/dashboard', icon: <DashboardOutlined />,   label: 'Dashboard' },
-  { key: '/patients',  icon: <TeamOutlined />,         label: 'Patients' },
-  { key: '/calendar',  icon: <CalendarOutlined />,     label: 'Calendar',  disabled: true },
-  { key: '/queue',     icon: <UnorderedListOutlined />, label: 'Queue',     disabled: true },
+  { key: '/dashboard', icon: <DashboardOutlined />,    label: 'Dashboard' },
+  { key: '/patients',  icon: <TeamOutlined />,          label: 'Patients' },
+  { key: '/calendar',  icon: <CalendarOutlined />,      label: 'Calendar' },
+  { key: '/queue',     icon: <UnorderedListOutlined />, label: 'Queue' },
 ];
 
 const ROLE_COLOR = { admin: '#722ed1', doctor: '#1677ff', assistant: '#52c41a' };
