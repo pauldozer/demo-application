@@ -1,12 +1,12 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   List, Button, Tag, Typography, Space, Select, Spin,
-  Empty, App, Tooltip
+  Empty, App, Tooltip, InputNumber
 } from 'antd';
 import {
   ReloadOutlined, CheckOutlined, UserOutlined,
   ClockCircleOutlined, StopOutlined, WifiOutlined,
-  FileTextOutlined, DollarOutlined
+  FileTextOutlined, DollarOutlined, CloseOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { appointmentsApi }  from '../api/appointments.api';
@@ -14,7 +14,6 @@ import { billingApi }       from '../api/billing.api';
 import { useAuth }          from '../context/AuthContext';
 import { useSocket }        from '../context/SocketContext';
 import ConsultationDrawer   from '../components/consultation/ConsultationDrawer';
-import { BILLING_STATUS_TAG } from '../components/billing/BillingPanel';
 
 const { Text, Title } = Typography;
 
@@ -52,6 +51,7 @@ export default function QueuePage() {
   const [doctors, setDoctors]     = useState([]);
   const [doctorId, setDoctorId]   = useState(user?.role === 'doctor' ? user.id : null);
   const [consultDrawer, setConsultDrawer] = useState({ open: false, patientId: null });
+  const [customInputs, setCustomInputs]   = useState({}); // { apptId: { show: bool, amount: number } }
   const today = dayjs().format('YYYY-MM-DD');
 
   const isDoctor    = user?.role === 'doctor';
@@ -175,22 +175,41 @@ export default function QueuePage() {
                 : parseFloat(billing.fee_amount || 0)
               : null;
 
-            const fmtUSD = (n) => `$${parseFloat(n).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+            const commPct      = parseFloat(appt.doctor_commission_pct || 0);
+            const clinicShare  = netFee != null && netFee > 0 ? +(netFee * commPct / 100).toFixed(2) : null;
+            const doctorShare  = clinicShare != null ? +(netFee - clinicShare).toFixed(2) : null;
 
-            const quickBillingAction = async (payStatus, feeType) => {
+            const fmtUSD = (n) => `$${parseFloat(n || 0).toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
+
+            const customInput = customInputs[appt.id] || { show: false, amount: null };
+
+            const quickBillingAction = async (payStatus, feeType, feeAmount) => {
               try {
                 const updated = await billingApi.upsert({
-                  appointment_id: appt.id,
-                  fee_type:        feeType  ?? billing?.fee_type ?? 'full',
-                  fee_amount:      billing?.fee_amount ?? null,
+                  appointment_id:  appt.id,
+                  fee_type:        feeType   ?? billing?.fee_type ?? 'full',
+                  fee_amount:      feeAmount !== undefined ? feeAmount : (billing?.fee_amount ?? null),
                   discount_amount: billing?.discount_amount ?? null,
                   payment_status:  payStatus,
                 });
                 setBilling(prev => ({ ...prev, [appt.id]: updated }));
+                // Hide custom input after setting
+                setCustomInputs(prev => ({ ...prev, [appt.id]: { show: false, amount: null } }));
               } catch {
                 message.error('Failed to update billing');
               }
             };
+
+            const handleSetCustom = () => {
+              const amt = customInput.amount;
+              if (!amt || amt <= 0) { message.warning('Enter a valid amount'); return; }
+              quickBillingAction('pending', 'custom', amt);
+            };
+
+            // Show action buttons when: no billing OR payment is pending
+            const showActions = !billing || billing.payment_status === 'pending';
+            // Show undo when payment is finalised (paid or waived)
+            const canUndo = billing && ['paid', 'waived'].includes(billing.payment_status);
 
             return (
               <List.Item
@@ -262,68 +281,92 @@ export default function QueuePage() {
                 <div style={{
                   marginTop: 10, paddingTop: 8,
                   borderTop: '1px dashed #f0f0f0',
-                  display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap'
                 }}>
-                  <DollarOutlined style={{ color: '#52c41a', fontSize: 14 }} />
+                  {/* Fee + status line */}
+                  <Space wrap style={{ marginBottom: 6 }}>
+                    <DollarOutlined style={{ color: '#52c41a', fontSize: 14 }} />
 
-                  {/* Fee amount display */}
-                  {!billing && (
-                    <Text type="secondary" style={{ fontSize: 12 }}>No fee set</Text>
-                  )}
-                  {billing?.fee_type === 'free' && (
-                    <Tag color="default">Free</Tag>
-                  )}
-                  {billing && billing.fee_type !== 'free' && netFee !== null && (
-                    <Text strong style={{ fontSize: 13 }}>{fmtUSD(netFee)}</Text>
+                    {!billing && <Text type="secondary" style={{ fontSize: 12 }}>No fee set</Text>}
+
+                    {billing && netFee !== null && (
+                      <Text strong style={{ fontSize: 13 }}>
+                        {netFee === 0 && billing.fee_type !== 'free' ? '—' : fmtUSD(netFee)}
+                      </Text>
+                    )}
+
+                    {billing?.payment_status === 'paid'   && <Tag color="green" style={{ fontWeight: 600 }}>✓ Paid</Tag>}
+                    {billing?.payment_status === 'waived' && <Tag color="default">Waived by doctor</Tag>}
+                    {billing?.payment_status === 'pending' && netFee > 0 && <Tag color="orange">Pending</Tag>}
+                    {billing?.fee_type === 'free' && <Tag color="default">Free</Tag>}
+                  </Space>
+
+                  {/* Commission split — shown when there's a real fee and commission is set */}
+                  {netFee > 0 && commPct > 0 && (
+                    <div style={{ marginBottom: 8 }}>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        Doctor receives: <strong>{fmtUSD(doctorShare)}</strong>
+                        &nbsp;·&nbsp;
+                        Clinic ({commPct}%): <strong>{fmtUSD(clinicShare)}</strong>
+                      </Text>
+                    </div>
                   )}
 
-                  {/* Payment status badge */}
-                  {billing?.payment_status === 'paid' && (
-                    <Tag color="green" style={{ fontWeight: 600 }}>✓ Paid</Tag>
-                  )}
-                  {billing?.payment_status === 'waived' && (
-                    <Tag color="default">Waived</Tag>
-                  )}
-                  {billing?.payment_status === 'pending' && billing?.fee_type !== 'free' && (
-                    <Tag color="orange">Pending</Tag>
-                  )}
-
-                  {/* Quick actions — for pending/no-billing situations */}
-                  {(!billing || billing.payment_status === 'pending') && billing?.fee_type !== 'free' && (
-                    <Space size={6}>
-                      <Button
-                        size="small"
-                        type="primary"
-                        style={{ background: '#52c41a', borderColor: '#52c41a' }}
-                        onClick={() => quickBillingAction('paid')}
-                      >
-                        Mark Paid
-                      </Button>
-                      <Tooltip title="Doctor waived the fee for this patient">
-                        <Button
-                          size="small"
-                          onClick={() => quickBillingAction('waived')}
-                        >
-                          Waive
+                  {/* Action buttons row */}
+                  <Space wrap size={6}>
+                    {showActions && (
+                      <>
+                        <Button size="small" type="primary"
+                          style={{ background: '#52c41a', borderColor: '#52c41a' }}
+                          onClick={() => quickBillingAction('paid')}>
+                          Mark Paid
                         </Button>
-                      </Tooltip>
-                      <Button
-                        size="small"
-                        onClick={() => quickBillingAction('paid', 'free')}
-                        style={{ color: '#8c8c8c' }}
-                      >
-                        Free
-                      </Button>
-                    </Space>
-                  )}
 
-                  {/* Allow reverting paid back to pending */}
-                  {billing?.payment_status === 'paid' && (
-                    <Button size="small" type="text" style={{ color: '#bfbfbf', fontSize: 11 }}
-                      onClick={() => quickBillingAction('pending')}>
-                      Undo
-                    </Button>
-                  )}
+                        <Tooltip title="Doctor decided not to charge — fee is waived">
+                          <Button size="small" onClick={() => quickBillingAction('waived')}>
+                            Waive
+                          </Button>
+                        </Tooltip>
+
+                        {/* Custom amount */}
+                        {customInput.show ? (
+                          <Space size={4}>
+                            <InputNumber
+                              size="small"
+                              min={0} step={5}
+                              placeholder="Amount $"
+                              value={customInput.amount}
+                              style={{ width: 110 }}
+                              prefix="$"
+                              onChange={(v) => setCustomInputs(prev => ({
+                                ...prev, [appt.id]: { show: true, amount: v }
+                              }))}
+                              onPressEnter={handleSetCustom}
+                              autoFocus
+                            />
+                            <Button size="small" type="primary" onClick={handleSetCustom}>Set</Button>
+                            <Button size="small" icon={<CloseOutlined />}
+                              onClick={() => setCustomInputs(prev => ({
+                                ...prev, [appt.id]: { show: false, amount: null }
+                              }))} />
+                          </Space>
+                        ) : (
+                          <Button size="small"
+                            onClick={() => setCustomInputs(prev => ({
+                              ...prev, [appt.id]: { show: true, amount: billing?.fee_amount ?? null }
+                            }))}>
+                            Custom $
+                          </Button>
+                        )}
+                      </>
+                    )}
+
+                    {canUndo && (
+                      <Button size="small" type="text" style={{ color: '#bfbfbf', fontSize: 11 }}
+                        onClick={() => quickBillingAction('pending')}>
+                        Undo
+                      </Button>
+                    )}
+                  </Space>
                 </div>
               </List.Item>
             );

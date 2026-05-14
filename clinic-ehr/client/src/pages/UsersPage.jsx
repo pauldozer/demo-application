@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Table, Button, Tag, Space, Typography, Card,
-  Modal, Form, Input, Select, Popconfirm, Switch, App
+  Modal, Form, Input, Select, Switch, App, InputNumber, Tooltip
 } from 'antd';
 import { UserAddOutlined, KeyOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
@@ -40,7 +40,7 @@ export default function UsersPage() {
   const openCreate = () => { setEdit(null); form.resetFields(); setForm(true); };
   const openEdit   = (u) => {
     setEdit(u);
-    form.setFieldsValue({ name: u.name, role: u.role, is_active: u.is_active });
+    form.setFieldsValue({ name: u.name, role: u.role, is_active: u.is_active, commission_pct: parseFloat(u.commission_pct || 0) });
     setForm(true);
   };
   const openPw = (u) => { setEdit(u); pwForm.resetFields(); setPw(true); };
@@ -92,6 +92,14 @@ export default function UsersPage() {
       title: 'Role',
       dataIndex: 'role',
       render: (v) => <Tag color={ROLE_COLOR[v]} style={{ textTransform: 'capitalize' }}>{v}</Tag>
+    },
+    {
+      title: 'Commission',
+      dataIndex: 'commission_pct',
+      width: 110,
+      render: (v, r) => r.role === 'doctor'
+        ? <Tooltip title="Clinic's share of this doctor's revenue"><Tag color="purple">{parseFloat(v || 0)}%</Tag></Tooltip>
+        : <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
     },
     {
       title: 'Status',
@@ -185,6 +193,28 @@ export default function UsersPage() {
               <Option value="assistant">Assistant / Secretary</Option>
               <Option value="admin">Admin</Option>
             </Select>
+          </Form.Item>
+
+          <Form.Item
+            noStyle
+            shouldUpdate={(prev, curr) => prev.role !== curr.role}
+          >
+            {({ getFieldValue }) => getFieldValue('role') === 'doctor' && (
+              <Form.Item
+                name="commission_pct"
+                label="Clinic Commission %"
+                tooltip="Percentage of each consultation fee that goes to the clinic. Doctor receives the remainder."
+                rules={[{ type: 'number', min: 0, max: 100, message: '0–100' }]}
+              >
+                <InputNumber
+                  min={0} max={100} step={5}
+                  formatter={v => `${v}%`}
+                  parser={v => v.replace('%', '')}
+                  style={{ width: '100%' }}
+                  placeholder="e.g. 30 (clinic takes 30%)"
+                />
+              </Form.Item>
+            )}
           </Form.Item>
 
           {editing && (

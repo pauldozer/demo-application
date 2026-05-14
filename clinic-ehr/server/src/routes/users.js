@@ -14,7 +14,7 @@ router.use(verifyToken);
 router.get('/', requireRole('admin'), async (req, res) => {
   try {
     const { rows } = await pool.query(
-      'SELECT id, name, username, role, is_active, created_at FROM users ORDER BY name'
+      'SELECT id, name, username, role, is_active, commission_pct, created_at FROM users ORDER BY name'
     );
     return res.json(rows);
   } catch (err) {
@@ -78,6 +78,7 @@ router.put('/:id', requireRole('admin'), [
   body('name').optional().trim().notEmpty(),
   body('role').optional().isIn(['admin', 'doctor', 'assistant']),
   body('is_active').optional().isBoolean(),
+  body('commission_pct').optional().isFloat({ min: 0, max: 100 }),
 ], async (req, res) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
@@ -90,7 +91,7 @@ router.put('/:id', requireRole('admin'), [
   }
 
   try {
-    const ALLOWED = ['name', 'role', 'is_active'];
+    const ALLOWED = ['name', 'role', 'is_active', 'commission_pct'];
     const sets    = [];
     const vals    = [];
     let   idx     = 1;
@@ -108,7 +109,7 @@ router.put('/:id', requireRole('admin'), [
 
     const { rows } = await pool.query(
       `UPDATE users SET ${sets.join(', ')} WHERE id = $${idx}
-       RETURNING id, name, username, role, is_active`,
+       RETURNING id, name, username, role, is_active, commission_pct`,
       vals
     );
     if (rows.length === 0) return res.status(404).json({ error: 'User not found' });

@@ -6,10 +6,11 @@ const BASE_SELECT = `
   SELECT
     a.id, a.patient_id, a.doctor_id, a.scheduled_at, a.duration_mins,
     a.type, a.status, a.check_in_time, a.notes, a.created_at, a.updated_at,
-    p.full_name  AS patient_name,
+    p.full_name      AS patient_name,
     p.patient_number,
-    p.phone      AS patient_phone,
-    u.name       AS doctor_name
+    p.phone          AS patient_phone,
+    u.name           AS doctor_name,
+    u.commission_pct AS doctor_commission_pct
   FROM appointments a
   JOIN patients p ON a.patient_id = p.id
   JOIN users    u ON a.doctor_id  = u.id
