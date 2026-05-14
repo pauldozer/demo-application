@@ -4,7 +4,7 @@ import {
   Divider, Row, Col, Select, App, Spin, Alert
 } from 'antd';
 import {
-  SaveOutlined, CheckCircleOutlined, ClockCircleOutlined
+  SaveOutlined, CheckCircleOutlined, ClockCircleOutlined, PrinterOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { consultationsApi } from '../../api/consultations.api';
@@ -186,8 +186,19 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
       }
       extra={<SaveIndicator />}
       footer={
-        canEdit && (
-          <Space style={{ justifyContent: 'flex-end', width: '100%' }}>
+        <Space style={{ justifyContent: 'space-between', width: '100%' }}>
+          <div>
+            {localId && (
+              <Button
+                icon={<PrinterOutlined />}
+                onClick={() => window.open(`/print/consultation/${localId}`, '_blank')}
+              >
+                Print
+              </Button>
+            )}
+          </div>
+          {canEdit && (
+          <Space>
             <Button onClick={onClose}>Close</Button>
             <Button
               icon={<SaveOutlined />}
@@ -207,7 +218,8 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
               Mark Complete
             </Button>
           </Space>
-        )
+          )}
+        </Space>
       }
       destroyOnClose
     >

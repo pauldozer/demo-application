@@ -1,31 +1,40 @@
 import React, { useState } from 'react';
 import { Outlet, useNavigate, useLocation } from 'react-router-dom';
-import { Layout, Menu, Avatar, Dropdown, Typography, Input, Space, App } from 'antd';
+import { Layout, Menu, Avatar, Dropdown, Typography, Input, Space, App, Switch } from 'antd';
 import {
   DashboardOutlined, TeamOutlined, CalendarOutlined,
   MedicineBoxOutlined, SearchOutlined, LogoutOutlined,
-  UserOutlined, SettingOutlined, UnorderedListOutlined
+  UserOutlined, SettingOutlined, UnorderedListOutlined,
+  AuditOutlined, GlobalOutlined
 } from '@ant-design/icons';
-import { useAuth } from '../../context/AuthContext';
+import { useAuth }      from '../../context/AuthContext';
+import { useDirection } from '../../context/DirectionContext';
 
 const { Sider, Header, Content } = Layout;
 const { Text } = Typography;
 
-const NAV_ITEMS = [
+const BASE_NAV = [
   { key: '/dashboard', icon: <DashboardOutlined />,    label: 'Dashboard' },
   { key: '/patients',  icon: <TeamOutlined />,          label: 'Patients' },
   { key: '/calendar',  icon: <CalendarOutlined />,      label: 'Calendar' },
   { key: '/queue',     icon: <UnorderedListOutlined />, label: 'Queue' },
 ];
 
+const ADMIN_NAV = [
+  { key: '/audit-logs', icon: <AuditOutlined />, label: 'Audit Log' },
+];
+
 const ROLE_COLOR = { admin: '#722ed1', doctor: '#1677ff', assistant: '#52c41a' };
 
 export default function AppLayout() {
-  const { user, logout }    = useAuth();
-  const navigate            = useNavigate();
-  const location            = useLocation();
-  const [collapsed, setCol] = useState(false);
-  const { message }         = App.useApp();
+  const { user, logout }          = useAuth();
+  const { direction, toggleDirection } = useDirection();
+  const navigate                  = useNavigate();
+  const location                  = useLocation();
+  const [collapsed, setCol]       = useState(false);
+  const { message }               = App.useApp();
+
+  const isRTL = direction === 'rtl';
 
   const handleSearch = (value) => {
     if (value.trim()) navigate(`/patients?q=${encodeURIComponent(value.trim())}`);
@@ -35,6 +44,10 @@ export default function AppLayout() {
     await logout();
     navigate('/login');
   };
+
+  const navItems = user?.role === 'admin'
+    ? [...BASE_NAV, ...ADMIN_NAV]
+    : BASE_NAV;
 
   const userMenu = [
     {
@@ -47,18 +60,38 @@ export default function AppLayout() {
           </Text>
         </div>
       ),
-      disabled: true
+      disabled: true,
     },
     { type: 'divider' },
+    {
+      key: 'rtl',
+      icon: <GlobalOutlined />,
+      label: (
+        <Space>
+          <span>{isRTL ? 'Switch to English (LTR)' : 'العربية (RTL)'}</span>
+          <Switch size="small" checked={isRTL} />
+        </Space>
+      ),
+      onClick: toggleDirection,
+    },
     ...(user?.role === 'admin' ? [
       { key: 'users', icon: <SettingOutlined />, label: 'User Management',
-        onClick: () => navigate('/users') }
+        onClick: () => navigate('/users') },
     ] : []),
+    { type: 'divider' },
     { key: 'logout', icon: <LogoutOutlined />, label: 'Sign Out',
-      danger: true, onClick: handleLogout }
+      danger: true, onClick: handleLogout },
   ];
 
   const selectedKey = '/' + location.pathname.split('/')[1];
+
+  const siderStyle = isRTL
+    ? { position: 'fixed', inset: '0 0 0 auto', zIndex: 200 }
+    : { position: 'fixed', inset: '0 auto 0 0', zIndex: 200 };
+
+  const mainStyle = isRTL
+    ? { marginRight: collapsed ? 80 : 220, marginLeft: 0, transition: 'margin 0.2s' }
+    : { marginLeft:  collapsed ? 80 : 220, marginRight: 0, transition: 'margin 0.2s' };
 
   return (
     <Layout style={{ minHeight: '100vh' }}>
@@ -68,9 +101,8 @@ export default function AppLayout() {
         collapsed={collapsed}
         onCollapse={setCol}
         width={220}
-        style={{ position: 'fixed', inset: '0 auto 0 0', zIndex: 200 }}
+        style={siderStyle}
       >
-        {/* Logo */}
         <div style={{
           height: 64, display: 'flex', alignItems: 'center',
           padding: '0 20px', gap: 10,
@@ -88,15 +120,14 @@ export default function AppLayout() {
           theme="dark"
           mode="inline"
           selectedKeys={[selectedKey]}
-          items={NAV_ITEMS}
+          items={navItems}
           onClick={({ key }) => navigate(key)}
           style={{ marginTop: 8, border: 'none' }}
         />
       </Sider>
 
       {/* ── Main ── */}
-      <Layout style={{ marginLeft: collapsed ? 80 : 220, transition: 'margin 0.2s' }}>
-        {/* ── Header ── */}
+      <Layout style={mainStyle}>
         <Header style={{
           position: 'sticky', top: 0, zIndex: 100,
           background: '#fff', padding: '0 24px',
@@ -125,7 +156,6 @@ export default function AppLayout() {
           </Dropdown>
         </Header>
 
-        {/* ── Content ── */}
         <Content style={{ margin: '24px', minHeight: 'calc(100vh - 112px)' }}>
           <Outlet />
         </Content>

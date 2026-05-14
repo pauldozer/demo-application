@@ -19,6 +19,7 @@ const consultationRoutes  = require('./routes/consultations');
 const prescriptionRoutes  = require('./routes/prescriptions');
 const medicationRoutes    = require('./routes/medications');
 const appointmentRoutes   = require('./routes/appointments');
+const auditRoutes         = require('./routes/audit');
 const fileRoutes          = require('./routes/files');
 
 // ── Ensure data directories exist ──────────────────────
@@ -57,6 +58,7 @@ app.use('/api/prescriptions', prescriptionRoutes);
 app.use('/api/medications',   medicationRoutes);
 app.use('/api/files',         fileRoutes);
 app.use('/api/appointments',  appointmentRoutes);
+app.use('/api/audit-logs',    auditRoutes);
 
 // ── Health check ────────────────────────────────────────
 app.get('/api/health', (req, res) => {
