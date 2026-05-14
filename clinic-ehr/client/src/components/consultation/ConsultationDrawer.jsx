@@ -30,6 +30,7 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
   const [saveStatus, setSaveStatus] = useState(''); // '' | 'saving' | 'saved' | 'error'
   const [consult, setConsult]   = useState(null);
   const [localId, setLocalId]   = useState(consultationId || null);
+  const [prevFollowUp, setPrevFollowUp] = useState(null); // follow-up note from last visit
   const autoSaveTimer           = useRef(null);
   const creationPromise         = useRef(null); // prevents duplicate draft creation
   const isNew                   = !consultationId;
@@ -39,6 +40,7 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
     if (!open) return;
     setLocalId(consultationId || null);
     setConsult(null);
+    setPrevFollowUp(null);
     form.resetFields();
     setSaveStatus('');
     creationPromise.current = null;
@@ -58,6 +60,15 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
         .finally(() => setLoading(false));
     } else {
       form.setFieldsValue({ visit_date: dayjs() });
+      // Load follow-up note from most recent completed consultation
+      if (patientId) {
+        consultationsApi.listForPatient(patientId)
+          .then(list => {
+            const last = list.find(c => c.status === 'complete' && c.follow_up_notes);
+            if (last) setPrevFollowUp({ notes: last.follow_up_notes, date: last.visit_date });
+          })
+          .catch(() => {});
+      }
     }
   }, [open, consultationId]);
 
@@ -258,6 +269,20 @@ export default function ConsultationDrawer({ open, patientId, consultationId, on
               message="This consultation is complete and locked."
               style={{ marginBottom: 16 }}
               showIcon
+            />
+          )}
+
+          {isNew && prevFollowUp && (
+            <Alert
+              type="warning"
+              showIcon
+              style={{ marginBottom: 16 }}
+              message={
+                <span>
+                  <strong>Follow-up note from {dayjs(prevFollowUp.date).format('DD/MM/YYYY')}:</strong>{' '}
+                  {prevFollowUp.notes}
+                </span>
+              }
             />
           )}
 

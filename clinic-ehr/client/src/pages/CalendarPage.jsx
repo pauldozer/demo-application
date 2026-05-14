@@ -283,11 +283,12 @@ export default function CalendarPage() {
           {!isDoctor && (
             <Select
               style={{ width: 200 }}
-              placeholder="All doctors"
-              allowClear
-              value={doctorId || undefined}
-              onChange={(v) => setDoctorId(v ?? null)}
-              options={doctors.map(d => ({ value: d.id, label: d.name }))}
+              value={doctorId || ''}
+              onChange={(v) => setDoctorId(v || null)}
+              options={[
+                { value: '', label: 'All Doctors' },
+                ...doctors.map(d => ({ value: d.id, label: d.name }))
+              ]}
             />
           )}
           <Button type="primary" icon={<PlusOutlined />} onClick={() => openNew(null, date)}>

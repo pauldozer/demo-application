@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   List, Button, Tag, Typography, Space, Select, Spin,
-  Empty, Popconfirm, App, Tooltip
+  Empty, App, Tooltip
 } from 'antd';
 import {
   ReloadOutlined, CheckOutlined, UserOutlined,
@@ -35,6 +35,7 @@ const STATUS_OPTIONS = [
   { value: 'in_progress', label: 'With Doctor' },
   { value: 'completed',   label: 'Done' },
   { value: 'no_show',     label: 'No Show' },
+  { value: 'cancelled',   label: 'Cancelled' },
 ];
 
 function countByStatus(list, ...statuses) {
@@ -122,11 +123,12 @@ export default function QueuePage() {
           {!isDoctor && (
             <Select
               style={{ width: 200 }}
-              placeholder="All doctors"
-              allowClear
-              value={doctorId || undefined}
-              onChange={(v) => setDoctorId(v ?? null)}
-              options={doctors.map(d => ({ value: d.id, label: d.name }))}
+              value={doctorId || ''}
+              onChange={(v) => setDoctorId(v || null)}
+              options={[
+                { value: '', label: 'All Doctors' },
+                ...doctors.map(d => ({ value: d.id, label: d.name }))
+              ]}
             />
           )}
           <Button icon={<ReloadOutlined />} onClick={load} loading={loading}>
@@ -162,8 +164,8 @@ export default function QueuePage() {
           dataSource={queue}
           renderItem={(appt) => {
             const s = STATUS_CFG[appt.status] || STATUS_CFG.scheduled;
-            const isTerminal = ['completed', 'cancelled', 'no_show'].includes(appt.status);
-            const billing    = billingMap[appt.id];
+            const isActive = !['completed', 'cancelled', 'no_show'].includes(appt.status);
+            const billing  = billingMap[appt.id];
 
             return (
               <List.Item
@@ -210,19 +212,19 @@ export default function QueuePage() {
 
                 {/* ── Actions ── */}
                 <Space wrap style={{ marginLeft: 16 }}>
-                  {/* ADMIN/ASSISTANT: free status dropdown */}
-                  {canEditFree && !isTerminal && (
+                  {/* ADMIN/ASSISTANT: full status dropdown — always reversible */}
+                  {canEditFree && (
                     <Select
                       size="small"
                       value={appt.status}
                       style={{ width: 130 }}
-                      options={STATUS_OPTIONS.filter(o => o.value !== 'cancelled')}
+                      options={STATUS_OPTIONS}
                       onChange={(v) => setStatus(appt.id, v)}
                     />
                   )}
 
                   {/* DOCTOR: forward-only buttons */}
-                  {isDoctor && !isTerminal && (
+                  {isDoctor && isActive && (
                     <>
                       {['scheduled', 'confirmed'].includes(appt.status) && (
                         <Button size="small" type="primary" icon={<UserOutlined />}
@@ -258,18 +260,6 @@ export default function QueuePage() {
                     >
                       Open Consultation
                     </Button>
-                  )}
-
-                  {/* Cancel — admin/assistant only */}
-                  {canEditFree && !isTerminal && (
-                    <Popconfirm
-                      title="Cancel this appointment?"
-                      onConfirm={() => setStatus(appt.id, 'cancelled')}
-                      okText="Yes, cancel"
-                      okButtonProps={{ danger: true }}
-                    >
-                      <Button size="small" danger>Cancel</Button>
-                    </Popconfirm>
                   )}
                 </Space>
               </List.Item>

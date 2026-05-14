@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
-  Drawer, Form, Select, DatePicker, Button, Space, App, Input, Popconfirm
+  Drawer, Form, Select, DatePicker, Button, Space, App, Input, Popconfirm, Modal, Typography
 } from 'antd';
-import { SaveOutlined, DeleteOutlined } from '@ant-design/icons';
+import { SaveOutlined, DeleteOutlined, UserAddOutlined } from '@ant-design/icons';
+
+const { Text } = Typography;
 import dayjs from 'dayjs';
 import { appointmentsApi } from '../../api/appointments.api';
 import { patientsApi }     from '../../api/patients.api';
@@ -18,6 +20,10 @@ export default function AppointmentDrawer({ open, appointment, prefillDate, pref
   const { message }     = App.useApp();
   const [saving, setSaving]           = useState(false);
   const [cancelling, setCancelling]   = useState(false);
+  const [quickOpen, setQuickOpen]     = useState(false);
+  const [quickName, setQuickName]     = useState('');
+  const [quickPhone, setQuickPhone]   = useState('');
+  const [registering, setRegistering] = useState(false);
   const [doctors, setDoctors]         = useState([]);
   const [patientOpts, setPatientOpts] = useState([]);
   const [searching, setSearching]     = useState(false);
@@ -78,6 +84,28 @@ export default function AppointmentDrawer({ open, appointment, prefillDate, pref
       }
     }, 250);
   }, []);
+
+  const handleQuickRegister = async () => {
+    if (!quickName.trim()) return;
+    setRegistering(true);
+    try {
+      const patient = await patientsApi.create({
+        full_name: quickName.trim(),
+        phone:     quickPhone.trim() || undefined,
+      });
+      const opt = { value: patient.id, label: `${patient.full_name} — ${patient.patient_number}` };
+      setPatientOpts(prev => [opt, ...prev]);
+      form.setFieldValue('patient_id', patient.id);
+      setQuickOpen(false);
+      setQuickName('');
+      setQuickPhone('');
+      message.success(`${patient.full_name} registered as ${patient.patient_number}`);
+    } catch {
+      message.error('Failed to register patient');
+    } finally {
+      setRegistering(false);
+    }
+  };
 
   const handleSubmit = async () => {
     try {
@@ -175,6 +203,17 @@ export default function AppointmentDrawer({ open, appointment, prefillDate, pref
             notFoundContent={null}
           />
         </Form.Item>
+        <div style={{ marginTop: -16, marginBottom: 16 }}>
+          <Button
+            type="link"
+            size="small"
+            icon={<UserAddOutlined />}
+            style={{ padding: 0, fontSize: 12 }}
+            onClick={() => setQuickOpen(true)}
+          >
+            Patient doesn't have a profile yet? Quick register
+          </Button>
+        </div>
 
         <Form.Item name="doctor_id" label="Doctor" rules={[{ required: true, message: 'Select a doctor' }]}>
           <Select
@@ -216,6 +255,44 @@ export default function AppointmentDrawer({ open, appointment, prefillDate, pref
           readOnly={appointment?.status === 'completed' && user?.role === 'doctor'}
         />
       )}
+
+      {/* Quick patient registration */}
+      <Modal
+        open={quickOpen}
+        title={<Space><UserAddOutlined />Quick Patient Registration</Space>}
+        onCancel={() => { setQuickOpen(false); setQuickName(''); setQuickPhone(''); }}
+        onOk={handleQuickRegister}
+        okText="Register & Select"
+        okButtonProps={{ loading: registering, disabled: !quickName.trim() }}
+        width={380}
+        destroyOnClose
+      >
+        <Text type="secondary" style={{ display: 'block', marginBottom: 16, fontSize: 13 }}>
+          Creates a minimal patient record. Full details can be completed when the patient arrives.
+        </Text>
+        <Space direction="vertical" style={{ width: '100%' }} size={12}>
+          <div>
+            <Text strong style={{ fontSize: 13 }}>Full Name *</Text>
+            <Input
+              value={quickName}
+              onChange={e => setQuickName(e.target.value)}
+              placeholder="e.g. محمد علي or Sarah Khalil"
+              style={{ marginTop: 4 }}
+              autoFocus
+              onPressEnter={handleQuickRegister}
+            />
+          </div>
+          <div>
+            <Text strong style={{ fontSize: 13 }}>Phone (optional)</Text>
+            <Input
+              value={quickPhone}
+              onChange={e => setQuickPhone(e.target.value)}
+              placeholder="+961 xx xxx xxx"
+              style={{ marginTop: 4 }}
+            />
+          </div>
+        </Space>
+      </Modal>
     </Drawer>
   );
 }
