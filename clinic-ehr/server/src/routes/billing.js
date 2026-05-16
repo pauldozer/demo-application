@@ -1,10 +1,24 @@
-const express        = require('express');
-const { verifyToken } = require('../middleware/auth');
-const { auditLog }    = require('../middleware/audit');
-const BillingService  = require('../services/billing.service');
+const express          = require('express');
+const { verifyToken }  = require('../middleware/auth');
+const { requireRole }  = require('../middleware/roles');
+const { auditLog }     = require('../middleware/audit');
+const BillingService   = require('../services/billing.service');
 
 const router = express.Router();
 router.use(verifyToken);
+
+// GET /api/billing/analytics?from=&to=  (admin only — must be before /:appointmentId)
+router.get('/analytics', requireRole('admin'), async (req, res) => {
+  try {
+    const { from, to } = req.query;
+    if (!from || !to) return res.status(400).json({ error: 'from and to dates required' });
+    const data = await BillingService.getAnalytics({ from, to });
+    res.json(data);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'Server error' });
+  }
+});
 
 // GET /api/billing/revenue?doctor_id=  (must be before /:appointmentId)
 router.get('/revenue', async (req, res) => {

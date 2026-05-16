@@ -10,7 +10,8 @@ const BASE_SELECT = `
     p.patient_number,
     p.phone          AS patient_phone,
     u.name           AS doctor_name,
-    u.commission_pct AS doctor_commission_pct
+    u.commission_pct AS doctor_commission_pct,
+    u.default_fee    AS doctor_default_fee
   FROM appointments a
   JOIN patients p ON a.patient_id = p.id
   JOIN users    u ON a.doctor_id  = u.id

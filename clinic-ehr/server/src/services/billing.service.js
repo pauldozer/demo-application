@@ -132,6 +132,88 @@ class BillingService {
       })),
     };
   }
+
+  async getAnalytics({ from, to }) {
+    const params = [from, to];
+
+    const { rows: daily } = await pool.query(`
+      SELECT
+        DATE(a.scheduled_at) AS date,
+        COALESCE(SUM(${NET_EXPR}), 0)::numeric AS revenue,
+        COALESCE(SUM(CASE WHEN EXTRACT(HOUR FROM a.scheduled_at) < 12 THEN ${NET_EXPR} ELSE 0 END), 0)::numeric AS am_revenue,
+        COALESCE(SUM(CASE WHEN EXTRACT(HOUR FROM a.scheduled_at) >= 12 THEN ${NET_EXPR} ELSE 0 END), 0)::numeric AS pm_revenue,
+        COUNT(*)::int AS count,
+        COUNT(CASE WHEN EXTRACT(HOUR FROM a.scheduled_at) < 12 THEN 1 END)::int AS am_count,
+        COUNT(CASE WHEN EXTRACT(HOUR FROM a.scheduled_at) >= 12 THEN 1 END)::int AS pm_count
+      FROM appointment_billing b
+      JOIN appointments a ON b.appointment_id = a.id
+      WHERE b.payment_status = 'paid'
+        AND a.scheduled_at::date BETWEEN $1::date AND $2::date
+      GROUP BY DATE(a.scheduled_at)
+      ORDER BY DATE(a.scheduled_at)
+    `, params);
+
+    const { rows: byDoctor } = await pool.query(`
+      SELECT
+        a.doctor_id,
+        u.name AS doctor_name,
+        COALESCE(u.commission_pct, 0) AS commission_pct,
+        COALESCE(SUM(${NET_EXPR}), 0)::numeric AS revenue,
+        COUNT(*)::int AS count
+      FROM appointment_billing b
+      JOIN appointments a ON b.appointment_id = a.id
+      JOIN users u ON a.doctor_id = u.id
+      WHERE b.payment_status = 'paid'
+        AND a.scheduled_at::date BETWEEN $1::date AND $2::date
+      GROUP BY a.doctor_id, u.name, u.commission_pct
+      ORDER BY revenue DESC
+    `, params);
+
+    const { rows: [totals] } = await pool.query(`
+      SELECT
+        COALESCE(SUM(CASE WHEN EXTRACT(HOUR FROM a.scheduled_at) < 12 THEN ${NET_EXPR} ELSE 0 END), 0)::numeric AS am_revenue,
+        COALESCE(SUM(CASE WHEN EXTRACT(HOUR FROM a.scheduled_at) >= 12 THEN ${NET_EXPR} ELSE 0 END), 0)::numeric AS pm_revenue,
+        COUNT(CASE WHEN EXTRACT(HOUR FROM a.scheduled_at) < 12 THEN 1 END)::int AS am_count,
+        COUNT(CASE WHEN EXTRACT(HOUR FROM a.scheduled_at) >= 12 THEN 1 END)::int AS pm_count,
+        COALESCE(SUM(${NET_EXPR}), 0)::numeric AS total_revenue,
+        COUNT(*)::int AS total_count
+      FROM appointment_billing b
+      JOIN appointments a ON b.appointment_id = a.id
+      WHERE b.payment_status = 'paid'
+        AND a.scheduled_at::date BETWEEN $1::date AND $2::date
+    `, params);
+
+    return {
+      daily: daily.map(r => ({
+        date:       r.date,
+        revenue:    parseFloat(r.revenue),
+        am_revenue: parseFloat(r.am_revenue),
+        pm_revenue: parseFloat(r.pm_revenue),
+        count:      r.count,
+        am_count:   r.am_count,
+        pm_count:   r.pm_count,
+      })),
+      by_doctor: byDoctor.map(r => {
+        const rev  = parseFloat(r.revenue);
+        const pct  = parseFloat(r.commission_pct || 0);
+        return {
+          doctor_id:     r.doctor_id,
+          doctor_name:   r.doctor_name,
+          commission_pct: pct,
+          revenue:       rev,
+          count:         r.count,
+          clinic_share:  +(rev * pct / 100).toFixed(2),
+          doctor_share:  +(rev * (1 - pct / 100)).toFixed(2),
+        };
+      }),
+      am_revenue:    parseFloat(totals.am_revenue),
+      pm_revenue:    parseFloat(totals.pm_revenue),
+      am_count:      totals.am_count,
+      pm_count:      totals.pm_count,
+      total_revenue: parseFloat(totals.total_revenue),
+      total_count:   totals.total_count,
+    };
+  }
 }
 
 module.exports = new BillingService();

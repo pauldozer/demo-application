@@ -40,7 +40,13 @@ export default function UsersPage() {
   const openCreate = () => { setEdit(null); form.resetFields(); setForm(true); };
   const openEdit   = (u) => {
     setEdit(u);
-    form.setFieldsValue({ name: u.name, role: u.role, is_active: u.is_active, commission_pct: parseFloat(u.commission_pct || 0) });
+    form.setFieldsValue({
+      name:           u.name,
+      role:           u.role,
+      is_active:      u.is_active,
+      commission_pct: parseFloat(u.commission_pct || 0),
+      default_fee:    u.default_fee != null ? parseFloat(u.default_fee) : null,
+    });
     setForm(true);
   };
   const openPw = (u) => { setEdit(u); pwForm.resetFields(); setPw(true); };
@@ -99,6 +105,14 @@ export default function UsersPage() {
       width: 110,
       render: (v, r) => r.role === 'doctor'
         ? <Tooltip title="Clinic's share of this doctor's revenue"><Tag color="purple">{parseFloat(v || 0)}%</Tag></Tooltip>
+        : <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
+    },
+    {
+      title: 'Default Fee',
+      dataIndex: 'default_fee',
+      width: 110,
+      render: (v, r) => r.role === 'doctor' && v != null
+        ? <Text strong style={{ color: '#52c41a' }}>${parseFloat(v).toFixed(0)}</Text>
         : <Text type="secondary" style={{ fontSize: 12 }}>—</Text>
     },
     {
@@ -200,20 +214,36 @@ export default function UsersPage() {
             shouldUpdate={(prev, curr) => prev.role !== curr.role}
           >
             {({ getFieldValue }) => getFieldValue('role') === 'doctor' && (
-              <Form.Item
-                name="commission_pct"
-                label="Clinic Commission %"
-                tooltip="Percentage of each consultation fee that goes to the clinic. Doctor receives the remainder."
-                rules={[{ type: 'number', min: 0, max: 100, message: '0–100' }]}
-              >
-                <InputNumber
-                  min={0} max={100} step={5}
-                  formatter={v => `${v}%`}
-                  parser={v => v.replace('%', '')}
-                  style={{ width: '100%' }}
-                  placeholder="e.g. 30 (clinic takes 30%)"
-                />
-              </Form.Item>
+              <>
+                <Form.Item
+                  name="commission_pct"
+                  label="Clinic Commission %"
+                  tooltip="Percentage of each consultation fee that goes to the clinic. Doctor receives the remainder."
+                  rules={[{ type: 'number', min: 0, max: 100, message: '0–100' }]}
+                >
+                  <InputNumber
+                    min={0} max={100} step={5}
+                    formatter={v => `${v}%`}
+                    parser={v => v.replace('%', '')}
+                    style={{ width: '100%' }}
+                    placeholder="e.g. 30 (clinic takes 30%)"
+                  />
+                </Form.Item>
+                <Form.Item
+                  name="default_fee"
+                  label="Default Consultation Fee ($)"
+                  tooltip="Standard fee pre-filled when billing this doctor's appointments. Can be overridden per appointment."
+                  rules={[{ type: 'number', min: 0, message: 'Must be 0 or more' }]}
+                >
+                  <InputNumber
+                    min={0} step={10}
+                    formatter={v => v ? `$ ${v}` : ''}
+                    parser={v => v.replace(/\$\s?/, '')}
+                    style={{ width: '100%' }}
+                    placeholder="e.g. 80"
+                  />
+                </Form.Item>
+              </>
             )}
           </Form.Item>
 

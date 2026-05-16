@@ -9,4 +9,7 @@ export const billingApi = {
 
   revenue: (params = {}) =>
     api.get('/billing/revenue', { params }).then(r => r.data),
+
+  analytics: (params = {}) =>
+    api.get('/billing/analytics', { params }).then(r => r.data),
 };
