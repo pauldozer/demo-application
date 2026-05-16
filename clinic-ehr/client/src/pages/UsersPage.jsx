@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import {
   Table, Button, Tag, Space, Typography, Card,
-  Modal, Form, Input, Select, Switch, App, InputNumber, Tooltip
+  Modal, Form, Input, Select, Switch, App, InputNumber, Tooltip, Divider
 } from 'antd';
-import { UserAddOutlined, KeyOutlined } from '@ant-design/icons';
+import { UserAddOutlined, KeyOutlined, PercentageOutlined, SaveOutlined } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import { usersApi } from '../api/users.api';
 import { useAuth } from '../context/AuthContext';
@@ -16,13 +16,15 @@ const ROLE_COLOR = { admin: 'purple', doctor: 'blue', assistant: 'green' };
 export default function UsersPage() {
   const { user: currentUser } = useAuth();
   const { message }           = App.useApp();
-  const [users, setUsers]     = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [showForm, setForm]   = useState(false);
-  const [showPwModal, setPw]  = useState(false);
-  const [editing, setEdit]    = useState(null);
-  const [form]                = Form.useForm();
-  const [pwForm]              = Form.useForm();
+  const [users, setUsers]         = useState([]);
+  const [loading, setLoading]     = useState(false);
+  const [showForm, setForm]       = useState(false);
+  const [showPwModal, setPw]      = useState(false);
+  const [editing, setEdit]        = useState(null);
+  const [form]                    = Form.useForm();
+  const [pwForm]                  = Form.useForm();
+  // Commission quick-edit state: { [userId]: { commission_pct, default_fee, saving } }
+  const [commEdits, setCommEdits] = useState({});
 
   if (currentUser?.role !== 'admin') {
     return <div>Access denied.</div>;
@@ -30,9 +32,40 @@ export default function UsersPage() {
 
   const load = async () => {
     setLoading(true);
-    try { setUsers(await usersApi.list()); }
+    try {
+      const list = await usersApi.list();
+      setUsers(list);
+      // Initialise commission quick-edit from loaded data
+      const edits = {};
+      list.filter(u => u.role === 'doctor').forEach(u => {
+        edits[u.id] = {
+          commission_pct: parseFloat(u.commission_pct || 0),
+          default_fee:    u.default_fee != null ? parseFloat(u.default_fee) : null,
+          saving: false,
+        };
+      });
+      setCommEdits(edits);
+    }
     catch { message.error('Failed to load users'); }
     finally { setLoading(false); }
+  };
+
+  const saveCommission = async (userId) => {
+    const edit = commEdits[userId];
+    if (!edit) return;
+    setCommEdits(prev => ({ ...prev, [userId]: { ...prev[userId], saving: true } }));
+    try {
+      await usersApi.update(userId, {
+        commission_pct: edit.commission_pct,
+        default_fee:    edit.default_fee,
+      });
+      message.success('Commission saved');
+      load();
+    } catch (err) {
+      message.error(err.response?.data?.error || 'Failed to save');
+    } finally {
+      setCommEdits(prev => ({ ...prev, [userId]: { ...prev[userId], saving: false } }));
+    }
   };
 
   useEffect(() => { load(); }, []); // eslint-disable-line
@@ -151,6 +184,91 @@ export default function UsersPage() {
           Add User
         </Button>
       </div>
+
+      {/* ── Doctor Commission & Fee Settings ── */}
+      {users.filter(u => u.role === 'doctor').length > 0 && (
+        <Card
+          style={{ marginBottom: 20, borderRadius: 8 }}
+          title={
+            <Space>
+              <PercentageOutlined style={{ color: '#722ed1' }} />
+              Doctor Commission & Default Fee
+            </Space>
+          }
+        >
+          <Table
+            dataSource={users.filter(u => u.role === 'doctor')}
+            rowKey="id"
+            size="small"
+            pagination={false}
+            columns={[
+              {
+                title: 'Doctor',
+                dataIndex: 'name',
+                render: (v) => <Text strong>{v}</Text>
+              },
+              {
+                title: 'Clinic Commission %',
+                key: 'commission_pct',
+                width: 200,
+                render: (_, r) => (
+                  <InputNumber
+                    size="small"
+                    min={0} max={100} step={5}
+                    value={commEdits[r.id]?.commission_pct ?? parseFloat(r.commission_pct || 0)}
+                    formatter={v => `${v}%`}
+                    parser={v => v.replace('%', '')}
+                    style={{ width: 100 }}
+                    onChange={(v) => setCommEdits(prev => ({
+                      ...prev, [r.id]: { ...prev[r.id], commission_pct: v ?? 0 }
+                    }))}
+                  />
+                )
+              },
+              {
+                title: 'Default Consultation Fee ($)',
+                key: 'default_fee',
+                width: 220,
+                render: (_, r) => (
+                  <InputNumber
+                    size="small"
+                    min={0} step={10}
+                    value={commEdits[r.id]?.default_fee ?? (r.default_fee != null ? parseFloat(r.default_fee) : null)}
+                    formatter={v => v != null && v !== '' ? `$ ${v}` : ''}
+                    parser={v => v.replace(/\$\s?/, '')}
+                    placeholder="No default"
+                    style={{ width: 130 }}
+                    onChange={(v) => setCommEdits(prev => ({
+                      ...prev, [r.id]: { ...prev[r.id], default_fee: v }
+                    }))}
+                  />
+                )
+              },
+              {
+                title: '',
+                key: 'save',
+                width: 80,
+                render: (_, r) => (
+                  <Button
+                    size="small"
+                    type="primary"
+                    icon={<SaveOutlined />}
+                    loading={commEdits[r.id]?.saving}
+                    onClick={() => saveCommission(r.id)}
+                  >
+                    Save
+                  </Button>
+                )
+              },
+            ]}
+          />
+          <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
+            Commission % = the clinic's share of each consultation fee. Doctor receives the remainder.
+          </div>
+        </Card>
+      )}
+
+      <Divider style={{ margin: '0 0 20px' }} />
 
       <Card styles={{ body: { padding: 0 } }}>
         <Table

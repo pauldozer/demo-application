@@ -2,12 +2,13 @@ import React, { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Row, Col, Card, Statistic, Typography, Spin, Table,
-  DatePicker, Space, Tag, Divider
+  DatePicker, Space, Tag, Divider, Segmented
 } from 'antd';
 import {
   TeamOutlined, CalendarOutlined, ClockCircleOutlined,
   UserAddOutlined, ArrowRightOutlined, DollarOutlined,
-  ExclamationCircleOutlined, RiseOutlined, SunOutlined, MoonOutlined
+  ExclamationCircleOutlined, RiseOutlined, SunOutlined,
+  MoonOutlined, WalletOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
@@ -33,7 +34,6 @@ const fmtUSD = (n) =>
 
 const fmtShortDate = (dateStr) => dayjs(dateStr).format('MMM D');
 
-// Custom recharts tooltip
 function ChartTooltip({ active, payload, label }) {
   if (!active || !payload?.length) return null;
   return (
@@ -48,6 +48,24 @@ function ChartTooltip({ active, payload, label }) {
   );
 }
 
+const PERIODS = [
+  { label: 'Day',   value: 'day' },
+  { label: 'Week',  value: 'week' },
+  { label: 'Month', value: 'month' },
+  { label: 'Year',  value: 'year' },
+];
+
+function periodToRange(p) {
+  const today = dayjs();
+  switch (p) {
+    case 'day':   return [today, today];
+    case 'week':  return [today.startOf('isoWeek'), today];
+    case 'month': return [today.startOf('month'), today];
+    case 'year':  return [today.startOf('year'), today];
+    default:      return null;
+  }
+}
+
 export default function DashboardPage() {
   const { user }              = useAuth();
   const navigate              = useNavigate();
@@ -57,10 +75,8 @@ export default function DashboardPage() {
   const [loadingStats, setLS] = useState(true);
   const [loadingRev,   setLR] = useState(true);
   const [loadingAn,    setLA] = useState(false);
-  const [dateRange, setDateRange] = useState([
-    dayjs().subtract(29, 'day'),
-    dayjs(),
-  ]);
+  const [period, setPeriod]   = useState('month');
+  const [dateRange, setDateRange] = useState(periodToRange('month'));
 
   const isAdmin     = user?.role === 'admin';
   const isAssistant = user?.role === 'assistant';
@@ -74,7 +90,7 @@ export default function DashboardPage() {
   }, []);
 
   const loadAnalytics = useCallback(async () => {
-    if (!isAdmin || !dateRange[0] || !dateRange[1]) return;
+    if (!isAdmin || !dateRange?.[0] || !dateRange?.[1]) return;
     setLA(true);
     try {
       const data = await billingApi.analytics({
@@ -91,11 +107,20 @@ export default function DashboardPage() {
 
   useEffect(() => { loadAnalytics(); }, [loadAnalytics]);
 
+  const handlePeriodChange = (p) => {
+    setPeriod(p);
+    setDateRange(periodToRange(p));
+  };
+
+  const handleRangeChange = (v) => {
+    if (v) { setPeriod(null); setDateRange(v); }
+  };
+
   const statCards = [
-    { title: 'Total Patients',          value: stats?.total_patients,       icon: <TeamOutlined />,         color: '#1677ff', onClick: () => navigate('/patients') },
-    { title: "Today's Appointments",    value: stats?.today_appointments,   icon: <CalendarOutlined />,     color: '#52c41a', onClick: () => navigate('/calendar') },
-    { title: 'Waiting / In Progress',   value: stats?.waiting,              icon: <ClockCircleOutlined />,  color: '#fa8c16', onClick: () => navigate('/queue') },
-    { title: 'New Patients Today',      value: stats?.new_today,            icon: <UserAddOutlined />,      color: '#722ed1', onClick: () => navigate('/patients') },
+    { title: 'Total Patients',       value: stats?.total_patients,     icon: <TeamOutlined />,        color: '#1677ff', onClick: () => navigate('/patients') },
+    { title: "Today's Appointments", value: stats?.today_appointments, icon: <CalendarOutlined />,    color: '#52c41a', onClick: () => navigate('/calendar') },
+    { title: 'Waiting / In Progress',value: stats?.waiting,           icon: <ClockCircleOutlined />, color: '#fa8c16', onClick: () => navigate('/queue') },
+    { title: 'New Patients Today',   value: stats?.new_today,         icon: <UserAddOutlined />,     color: '#722ed1', onClick: () => navigate('/patients') },
   ];
 
   const revCards = [
@@ -104,14 +129,37 @@ export default function DashboardPage() {
     { title: 'This Month', value: revenue?.month, color: '#722ed1' },
   ];
 
+  // Admin: per-doctor revenue table (today/week/month)
   const drColumns = [
-    { title: 'Doctor',          dataIndex: 'doctor_name', key: 'name' },
-    { title: 'Today',           dataIndex: 'today',       key: 'today',  render: fmtUSD },
-    { title: 'This Week',       dataIndex: 'week',        key: 'week',   render: fmtUSD },
-    { title: 'This Month',      dataIndex: 'month',       key: 'month',  render: fmtUSD },
+    { title: 'Doctor',     dataIndex: 'doctor_name', key: 'name' },
+    { title: 'Today',      dataIndex: 'today',       key: 'today',  render: fmtUSD },
+    { title: 'This Week',  dataIndex: 'week',        key: 'week',   render: fmtUSD },
+    { title: 'This Month', dataIndex: 'month',       key: 'month',  render: fmtUSD },
   ];
 
-  // Analytics columns for admin date-range table
+  // Assistant: doctor payout table — what to pay each doctor today
+  const payoutColumns = [
+    { title: 'Doctor',    dataIndex: 'doctor_name',  key: 'name' },
+    { title: 'Revenue Today', dataIndex: 'today',    key: 'today',   render: fmtUSD },
+    {
+      title: 'Clinic Commission',
+      key: 'clinic',
+      render: (_, r) => (
+        <Space size={4}>
+          <Text>{fmtUSD(r.today_clinic)}</Text>
+          <Tag color="purple" style={{ fontSize: 11 }}>{r.commission_pct}%</Tag>
+        </Space>
+      )
+    },
+    {
+      title: 'Pay Doctor',
+      dataIndex: 'today_payout',
+      key: 'payout',
+      render: (v) => <Text strong style={{ color: '#1677ff' }}>{fmtUSD(v)}</Text>
+    },
+  ];
+
+  // Admin analytics: by-doctor table for selected period
   const analyticsDocColumns = [
     { title: 'Doctor',          dataIndex: 'doctor_name',   key: 'name' },
     { title: 'Consultations',   dataIndex: 'count',         key: 'count' },
@@ -127,16 +175,17 @@ export default function DashboardPage() {
         </Space>
       )
     },
-    { title: 'Doctor Receives', dataIndex: 'doctor_share',  key: 'doctor_share', render: fmtUSD },
+    { title: 'Doctor Receives', dataIndex: 'doctor_share', key: 'doctor_share', render: fmtUSD },
   ];
 
-  // Recharts data
   const chartData = (analytics?.daily || []).map(d => ({
     date:  fmtShortDate(d.date),
     Total: d.revenue,
     AM:    d.am_revenue,
     PM:    d.pm_revenue,
   }));
+
+  const hasDoctors = (revenue?.by_doctor?.length || 0) > 0;
 
   return (
     <div>
@@ -206,8 +255,8 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Per-doctor breakdown — admin and assistant only */}
-        {!isDoctor && !loadingRev && (revenue?.by_doctor?.length || 0) > 0 && (
+        {/* Admin/assistant: clinic revenue by doctor */}
+        {!isDoctor && !loadingRev && hasDoctors && (
           <Card size="small" title="Revenue by Doctor" style={{ marginTop: 16, borderRadius: 8 }}>
             <Table
               dataSource={revenue.by_doctor}
@@ -226,6 +275,43 @@ export default function DashboardPage() {
             />
           </Card>
         )}
+
+        {/* ── Doctor Payouts Today — assistant only ── */}
+        {isAssistant && !loadingRev && hasDoctors && (
+          <Card
+            size="small"
+            title={
+              <Space>
+                <WalletOutlined style={{ color: '#1677ff' }} />
+                Doctor Payouts Today
+              </Space>
+            }
+            style={{ marginTop: 16, borderRadius: 8 }}
+          >
+            <Table
+              dataSource={revenue.by_doctor}
+              columns={payoutColumns}
+              rowKey="doctor_id"
+              size="small"
+              pagination={false}
+              summary={() => {
+                const totPayout = revenue.by_doctor.reduce((s, r) => s + r.today_payout, 0);
+                const totClinic = revenue.by_doctor.reduce((s, r) => s + r.today_clinic, 0);
+                return (
+                  <Table.Summary.Row>
+                    <Table.Summary.Cell index={0}><Text strong>Total</Text></Table.Summary.Cell>
+                    <Table.Summary.Cell index={1}><Text strong>{fmtUSD(revenue.today)}</Text></Table.Summary.Cell>
+                    <Table.Summary.Cell index={2}><Text strong>{fmtUSD(totClinic)}</Text></Table.Summary.Cell>
+                    <Table.Summary.Cell index={3}><Text strong style={{ color: '#1677ff' }}>{fmtUSD(totPayout)}</Text></Table.Summary.Cell>
+                  </Table.Summary.Row>
+                );
+              }}
+            />
+            <div style={{ marginTop: 8, fontSize: 12, color: '#8c8c8c' }}>
+              Payout = revenue collected today minus clinic commission per doctor
+            </div>
+          </Card>
+        )}
       </div>
 
       {/* ── Financial Analytics — admin only ── */}
@@ -237,19 +323,22 @@ export default function DashboardPage() {
               <RiseOutlined style={{ color: '#1677ff', marginRight: 8 }} />
               Financial Analytics
             </Title>
-            <RangePicker
-              value={dateRange}
-              onChange={(v) => v && setDateRange(v)}
-              format="DD/MM/YYYY"
-              allowClear={false}
-              presets={[
-                { label: 'Last 7 days',  value: [dayjs().subtract(6, 'day'), dayjs()] },
-                { label: 'Last 30 days', value: [dayjs().subtract(29, 'day'), dayjs()] },
-                { label: 'Last 90 days', value: [dayjs().subtract(89, 'day'), dayjs()] },
-                { label: 'This month',   value: [dayjs().startOf('month'), dayjs()] },
-                { label: 'This year',    value: [dayjs().startOf('year'), dayjs()] },
-              ]}
-            />
+
+            <Space wrap>
+              <Segmented
+                options={PERIODS}
+                value={period}
+                onChange={handlePeriodChange}
+              />
+              <RangePicker
+                value={dateRange}
+                onChange={handleRangeChange}
+                format="DD/MM/YYYY"
+                allowClear={false}
+                placeholder={['From', 'To']}
+                style={{ width: 220 }}
+              />
+            </Space>
           </div>
 
           {loadingAn ? (
@@ -291,7 +380,7 @@ export default function DashboardPage() {
                 </Col>
               </Row>
 
-              {/* Revenue trend chart */}
+              {/* Revenue trend + AM/PM charts */}
               {chartData.length > 0 ? (
                 <>
                   <Card size="small" title="Daily Revenue Trend" style={{ borderRadius: 8, marginBottom: 16 }}>
@@ -309,7 +398,6 @@ export default function DashboardPage() {
                     </ResponsiveContainer>
                   </Card>
 
-                  {/* AM vs PM bar comparison */}
                   <Card size="small" title="AM vs PM Revenue by Day" style={{ borderRadius: 8, marginBottom: 16 }}>
                     <ResponsiveContainer width="100%" height={200}>
                       <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
@@ -330,7 +418,7 @@ export default function DashboardPage() {
                 </Card>
               )}
 
-              {/* By-doctor breakdown table */}
+              {/* By-doctor breakdown for selected period */}
               {(analytics?.by_doctor?.length || 0) > 0 && (
                 <Card size="small" title="Revenue by Doctor" style={{ borderRadius: 8 }}>
                   <Table

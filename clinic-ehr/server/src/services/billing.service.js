@@ -96,6 +96,7 @@ class BillingService {
         SELECT
           a.doctor_id,
           u.name AS doctor_name,
+          COALESCE(u.commission_pct, 0) AS commission_pct,
           COALESCE(SUM(${NET_EXPR}) FILTER (
             WHERE b.payment_status = 'paid'
               AND a.scheduled_at::date = CURRENT_DATE
@@ -112,7 +113,7 @@ class BillingService {
         JOIN appointments a ON b.appointment_id = a.id
         JOIN users u ON a.doctor_id = u.id
         WHERE a.scheduled_at >= DATE_TRUNC('month', CURRENT_DATE) - INTERVAL '7 days'
-        GROUP BY a.doctor_id, u.name
+        GROUP BY a.doctor_id, u.name, u.commission_pct
         ORDER BY month DESC
       `);
       byDoctor = rows;
@@ -123,13 +124,24 @@ class BillingService {
       week:          parseFloat(totals.week   || 0),
       month:         parseFloat(totals.month  || 0),
       today_pending: totals.today_pending || 0,
-      by_doctor:     byDoctor.map(r => ({
-        doctor_id:   r.doctor_id,
-        doctor_name: r.doctor_name,
-        today:       parseFloat(r.today  || 0),
-        week:        parseFloat(r.week   || 0),
-        month:       parseFloat(r.month  || 0),
-      })),
+      by_doctor:     byDoctor.map(r => {
+        const commPct  = parseFloat(r.commission_pct || 0);
+        const todayRev = parseFloat(r.today  || 0);
+        const weekRev  = parseFloat(r.week   || 0);
+        const monthRev = parseFloat(r.month  || 0);
+        return {
+          doctor_id:      r.doctor_id,
+          doctor_name:    r.doctor_name,
+          commission_pct: commPct,
+          today:          todayRev,
+          week:           weekRev,
+          month:          monthRev,
+          today_clinic:   +(todayRev * commPct / 100).toFixed(2),
+          today_payout:   +(todayRev * (1 - commPct / 100)).toFixed(2),
+          week_payout:    +(weekRev  * (1 - commPct / 100)).toFixed(2),
+          month_payout:   +(monthRev * (1 - commPct / 100)).toFixed(2),
+        };
+      }),
     };
   }
 
