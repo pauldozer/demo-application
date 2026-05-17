@@ -366,7 +366,7 @@ const VIBES = {
                trans:['hardCut','filterSweep','classic'],                  tw:[.45,.35,.20] },
   lateNight: { label:'🌙 Late Night',     color:'#8b5cf6', bpm:[116,126], bars:32, keyK:0.9, pickN:2,
                trans:['classic','filterSweep','echoStutter'],              tw:[.40,.35,.25] },
-  tropical:  { label:'🌴 Afro/Tropical',  color:'#f59e0b', bpm:[112,126], bars:32, keyK:0.8, pickN:3,
+  tropical:  { label:'🌴 Afro/Tropical',  color:'#f59e0b', bpm:[112,126], bars:16, keyK:0.8, pickN:3,
                trans:['bassSwitch','classic','filterSweep'],               tw:[.40,.40,.20] },
   workout:   { label:'💪 Workout',        color:'#ef4444', bpm:[126,145], bars:16, keyK:0.35, pickN:2,
                trans:['hardCut','filterSweep','classic'],                  tw:[.45,.35,.20] },
@@ -425,8 +425,20 @@ function detectBPM(buf){
   const esr=sr/hop,minL=Math.floor(60/200*esr),maxL=Math.ceil(60/60*esr);
   let bL=minL,bC=0;
   for(let lag=minL;lag<=maxL;lag++){let c=0;for(let i=0;i<on.length-lag;i++)c+=on[i]*on[i+lag];if(c>bC){bC=c;bL=lag;}}
-  let bpm=60/(bL/esr);while(bpm<70)bpm*=2;while(bpm>175)bpm/=2;
-  return Math.round(bpm*10)/10;
+  let raw=60/(bL/esr);
+  // Normalize raw BPM into musical range using genre-aware candidate selection.
+  // Try common tempo ratios and pick the candidate closest to 115 BPM (center of
+  // Afro House / deep house) that lands in the 88–145 BPM window.
+  const RATIOS=[1,2,0.5,0.75,1.5,4/3,2/3,3/2];
+  const TARGET=115,LO=88,HI=145;
+  let best=raw,bestDist=Infinity;
+  for(const r of RATIOS){
+    const c=raw*r;
+    if(c>=LO&&c<=HI){const dist=Math.abs(c-TARGET);if(dist<bestDist){bestDist=dist;best=c;}}
+  }
+  // Fall back to simple octave fold if nothing in range
+  if(bestDist===Infinity){while(best<70)best*=2;while(best>175)best/=2;}
+  return Math.round(best*10)/10;
 }
 
 // ══════════════════════════════════════════════════════════════
@@ -439,17 +451,27 @@ const CAM_MAJ=['8B','3B','10B','5B','12B','7B','2B','9B','4B','11B','6B','1B'];
 const CAM_MIN=['5A','12A','7A','2A','9A','4A','11A','6A','1A','8A','3A','10A'];
 
 function detectKey(buf){
-  const d=buf.getChannelData(0),sr=buf.sampleRate,fS=4096,hop=fS*3;
-  const max=Math.min(d.length,sr*60),ch=new Float32Array(12);let frames=0;
+  const d=buf.getChannelData(0),sr=buf.sampleRate,fS=8192,hop=fS*2;
+  const max=Math.min(d.length,sr*90),ch=new Float32Array(12);let frames=0;
   for(let off=0;off<max-fS;off+=hop){
     const re=new Float32Array(fS),im=new Float32Array(fS);
     for(let i=0;i<fS;i++){const w=0.5*(1-Math.cos(2*Math.PI*i/(fS-1)));re[i]=d[off+i]*w;}
     fft(re,im);
-    for(let i=1;i<fS/2;i++){const f=i*sr/fS;if(f<65||f>2000)continue;const m=Math.sqrt(re[i]*re[i]+im[i]*im[i]);const midi=12*Math.log2(f/440)+69;ch[((Math.round(midi)%12)+12)%12]+=m;}
+    for(let i=1;i<fS/2;i++){
+      const f=i*sr/fS;
+      // Focus on melodic/harmonic range: C3 (130 Hz) to C7 (2093 Hz) — avoids sub-bass bias
+      if(f<130||f>4200)continue;
+      const m=Math.sqrt(re[i]*re[i]+im[i]*im[i]);
+      // Perceptual weight: reduce bass influence below 500 Hz to avoid bass-line key bias
+      const w=Math.min(1.0,f/500);
+      const midi=12*Math.log2(f/440)+69;
+      ch[((Math.round(midi)%12)+12)%12]+=m*w;
+    }
     frames++;
   }
   if(!frames)return{name:'—',camelot:'—'};
-  const mx=Math.max(...ch);if(mx>0)for(let i=0;i<12;i++)ch[i]/=mx;
+  // Normalize using sum (not max) for more stable comparison across frames
+  const sum=ch.reduce((a,b)=>a+b,0);if(sum>0)for(let i=0;i<12;i++)ch[i]/=sum;
   let bR=0,bMaj=true,bC=-Infinity;
   for(let r=0;r<12;r++)for(const[isMaj,P]of[[true,MAJP],[false,MINP]]){let c=0;for(let i=0;i<12;i++)c+=ch[(i+r)%12]*P[i];if(c>bC){bC=c;bR=r;bMaj=isMaj;}}
   return{name:NOTES[bR]+(bMaj?' maj':' min'),camelot:bMaj?CAM_MAJ[bR]:CAM_MIN[bR]};
@@ -605,6 +627,12 @@ function executeTransition(from,to,type,bars,onDone){
   if(!D[to].playing){D[to].rate=D[to].bpm?D[from].bpm/D[to].bpm:1;playDeck(to,0);updateTransUI(to);}
   // Dispatch
   const done=()=>{transRunning=false;resetDeckFX(from);stopSrc(from);updateTransUI(from);
+    // Sync EQ knob UI back to 0 for the outgoing deck (audio resets, UI must match)
+    ['low','mid','high'].forEach(band=>{
+      const k=document.querySelector(`.knob[data-deck="${from}"][data-band="${band}"]`);
+      if(k){k.dataset.val=0;setKnobRot(k);}
+      const el=document.getElementById(`kv-${band}-${from}`);if(el)el.textContent='0';
+    });
     const badge=document.getElementById('trans-badge');if(badge){badge.textContent='— IDLE';badge.style.color='var(--dim)';badge.style.borderColor='var(--border)';badge.style.background='var(--s2)';}
     const bar=document.getElementById('trans-bar');if(bar)bar.style.width='0%';
     if(onDone)onDone();};
@@ -641,8 +669,8 @@ function doClassic(from,to,bars,bpm,dur,done){
 function doFilterSweep(from,to,bars,bpm,dur,done){
   const now=actx.currentTime,ep=from==='a'?1:0;
   const sweepEnd=now+dur*0.65,fadeEnd=now+dur;
-  // Incoming LPF sweeps open
-  D[to].lpf.frequency.cancelScheduledValues(now);D[to].lpf.frequency.setValueAtTime(280,now);D[to].lpf.frequency.exponentialRampToValueAtTime(22050,sweepEnd);
+  // Incoming LPF sweeps open — start at 900 Hz (audible but not muffled) rather than 280 Hz
+  D[to].lpf.frequency.cancelScheduledValues(now);D[to].lpf.frequency.setValueAtTime(900,now);D[to].lpf.frequency.exponentialRampToValueAtTime(22050,sweepEnd);
   // Incoming bass cut until half of sweep
   D[to].eL.gain.cancelScheduledValues(now);D[to].eL.gain.setValueAtTime(-10,now);D[to].eL.gain.linearRampToValueAtTime(0,now+dur*0.5);
   // Outgoing LPF closes in last 30%
@@ -758,18 +786,36 @@ const playedIds=new Set();
 
 function pickNextTrack(currentTrack){
   const v=VIBES[selectedVibe];
-  const qIds=new Set(queue.map(t=>t.id));
-  let pool=library.filter(t=>t.state==='ready'&&!qIds.has(t.id)&&!playedIds.has(t.id));
-  if(!pool.length){playedIds.clear();pool=library.filter(t=>t.state==='ready'&&!qIds.has(t.id));}
+  // During initial fill (DJ not yet active) use the full queue to prevent duplicates.
+  // During playback, only future (unplayed) queue items block re-use.
+  const futureQ=new Set((DJ.active?queue.slice(DJ.curIdx):queue).map(t=>t.id));
+  let pool=library.filter(t=>t.state==='ready'&&!futureQ.has(t.id)&&!playedIds.has(t.id));
+  if(!pool.length){
+    // Entire library is either upcoming or recently played — clear history and try again
+    playedIds.clear();
+    pool=library.filter(t=>t.state==='ready'&&!futureQ.has(t.id));
+  }
   if(!pool.length)return null;
+  // How many times each key cluster appears in the upcoming queue (variety forcing)
+  const clusterLoad={};
+  (DJ.active?queue.slice(DJ.curIdx):queue).forEach(t=>{
+    const l=t.camelot?.slice(-1);if(l)clusterLoad[l]=(clusterLoad[l]||0)+1;
+  });
   const scored=pool.map(t=>{
     let score=0;
+    // BPM compatibility
     if(currentTrack?.bpm&&t.bpm){
       const pct=Math.abs(currentTrack.bpm-t.bpm)/currentTrack.bpm;
       if(pct<0.04)score+=5;else if(pct<0.08)score+=3;else if(pct<0.15)score+=1;else score-=2;
     }
+    // Key compatibility — balanced: reward harmonic but don't ban exploration
     const compat=keyCompat(currentTrack?.camelot,t.camelot);
-    if(compat){if(compat.cls==='ok')score+=v.keyK*5;else if(compat.cls==='boost')score+=v.keyK*3;else score-=v.keyK;}
+    if(compat){if(compat.cls==='ok')score+=v.keyK*4;else if(compat.cls==='boost')score+=v.keyK*2;else score-=v.keyK*2;}
+    // Variety: penalise key clusters already over-represented in upcoming queue
+    const l=t.camelot?.slice(-1);
+    if(l)score-=(clusterLoad[l]||0)*1.8;
+    // Recency: mild penalty for recently played tracks (encourages fresh picks)
+    if(playedIds.has(t.id))score-=2;
     score+=Math.random()*1.5;
     return{t,score};
   }).sort((a,b)=>b.score-a.score);
@@ -868,8 +914,14 @@ const DJ={
       DJ.transFired=true;
       const from=DJ.curDeck,to=from==='a'?'b':'a';
       playedIds.add(queue[DJ.curIdx].id);
+      const prevTrack=queue[DJ.curIdx],nextTrack=queue[nextIdx];
       DJ.curIdx=nextIdx;DJ.curDeck=to;DJ.nextLoaded=false;DJ.nextIdx=-1;
-      const type=pickWeighted(v.trans,v.tw);
+      // Key-aware transition selection: clashing keys → brief hard cut or echo stutter
+      // to minimise the time two harmonically unrelated tracks overlap.
+      const compat=keyCompat(prevTrack?.camelot,nextTrack?.camelot);
+      const type=compat?.cls==='bad'
+        ?(Math.random()<0.55?'hardCut':'echoStutter')
+        :pickWeighted(v.trans,v.tw);
       setTimeout(()=>{DJ.transFired=false;},transDur*1000+3000);
       renderQ();
       executeTransition(from,to,type,bars,()=>{resetDeckFX(from);});
