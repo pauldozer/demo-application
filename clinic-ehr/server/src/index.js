@@ -34,13 +34,17 @@ const app    = express();
 const server = http.createServer(app);
 
 const CLIENT_URL = process.env.CLIENT_URL || 'http://localhost:5173';
+const IS_PROD = process.env.NODE_ENV === 'production';
+
+// In production the frontend is served from the same server — allow same-origin + CLIENT_URL
+const corsOrigin = IS_PROD ? true : CLIENT_URL;
 
 const io = new Server(server, {
-  cors: { origin: CLIENT_URL, credentials: true }
+  cors: { origin: corsOrigin, credentials: true }
 });
 
-app.use(helmet({ contentSecurityPolicy: false })); // CSP handled by Vite in dev
-app.use(cors({ origin: CLIENT_URL, credentials: true }));
+app.use(helmet({ contentSecurityPolicy: false }));
+app.use(cors({ origin: corsOrigin, credentials: true }));
 app.use(cookieParser());
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
@@ -71,6 +75,14 @@ app.get('/api/health', (req, res) => {
 app.use('/api', (req, res) => {
   res.status(404).json({ error: 'Not found' });
 });
+
+// ── Serve React frontend in production ──────────────────
+const DIST = path.join(__dirname, '..', 'public');
+if (process.env.NODE_ENV === 'production' && fs.existsSync(DIST)) {
+  app.use(express.static(DIST));
+  // React Router: send index.html for any non-API route
+  app.get('*', (req, res) => res.sendFile(path.join(DIST, 'index.html')));
+}
 
 // ── Socket.io ───────────────────────────────────────────
 io.on('connection', (socket) => {
