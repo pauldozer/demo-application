@@ -238,7 +238,7 @@ select.trans-sel option{background:var(--surface);}
   <button class="cbtn" onclick="syncBPM('b','a')">SYNC B → A</button>
   <button class="cbtn" onclick="syncBPM('a','b')">SYNC A → B</button>
   <div class="compat-box"><div class="compat-lbl">KEY COMPAT</div><div class="compat-val" id="compat-display">—</div></div>
-  <div class="bsel-wrap"><div class="bsel-lbl">TRANSITION</div><select class="bsel" id="trans-bars"><option value="8">8 bars</option><option value="16" selected>16 bars</option><option value="32">32 bars</option></select></div>
+  <div class="bsel-wrap"><div class="bsel-lbl">TRANSITION</div><select class="bsel" id="trans-bars"><option value="16">16 bars</option><option value="32" selected>32 bars</option><option value="48">48 bars</option><option value="64">64 bars</option></select></div>
   <button class="abtn" id="trans-btn" onclick="triggerTransition('a','b','classic')">AUTO TRANSITION<br><span style="font-size:9px;opacity:.7;font-weight:400">A → B</span></button>
 </div>
 
@@ -280,9 +280,10 @@ select.trans-sel option{background:var(--surface);}
       <input type="file" accept="audio/*" multiple onchange="addMoreFiles(this.files)">+ Add Files
     </button>
     <select class="trans-sel" id="auto-bars">
-      <option value="8">8 bars</option>
-      <option value="16" selected>16 bars</option>
-      <option value="32">32 bars</option>
+      <option value="16">16 bars</option>
+      <option value="32" selected>32 bars</option>
+      <option value="48">48 bars</option>
+      <option value="64">64 bars</option>
     </select>
     <span class="lib-stat" id="lib-stat">No tracks loaded</span>
     <button class="tbtn stop" id="stop-btn" style="display:none" onclick="DJ.stop()">⏹ Stop</button>
@@ -362,16 +363,16 @@ select.trans-sel option{background:var(--surface);}
 const VIBES = {
   club:      { label:'🔥 Club',          color:'#6c63ff', bpm:[118,134], bars:32, keyK:0.7, pickN:3,
                trans:['filterSweep','classic','echoStutter','bassSwitch'], tw:[.30,.30,.20,.20] },
-  techno:    { label:'⚡ Techno',         color:'#06b6d4', bpm:[130,150], bars:16, keyK:0.25, pickN:2,
-               trans:['hardCut','filterSweep','classic'],                  tw:[.45,.35,.20] },
-  lateNight: { label:'🌙 Late Night',     color:'#8b5cf6', bpm:[116,126], bars:32, keyK:0.9, pickN:2,
-               trans:['classic','filterSweep','echoStutter'],              tw:[.40,.35,.25] },
-  tropical:  { label:'🌴 Afro/Tropical',  color:'#f59e0b', bpm:[112,126], bars:16, keyK:0.8, pickN:3,
-               trans:['bassSwitch','classic','filterSweep'],               tw:[.40,.40,.20] },
+  techno:    { label:'⚡ Techno',         color:'#06b6d4', bpm:[130,150], bars:32, keyK:0.25, pickN:2,
+               trans:['hardCut','filterSweep','classic'],                  tw:[.40,.35,.25] },
+  lateNight: { label:'🌙 Late Night',     color:'#8b5cf6', bpm:[116,126], bars:48, keyK:0.9, pickN:2,
+               trans:['classic','filterSweep','echoStutter'],              tw:[.45,.30,.25] },
+  tropical:  { label:'🌴 Afro/Tropical',  color:'#f59e0b', bpm:[112,126], bars:32, keyK:0.8, pickN:3,
+               trans:['bassSwitch','classic','filterSweep','echoStutter'], tw:[.35,.35,.15,.15] },
   workout:   { label:'💪 Workout',        color:'#ef4444', bpm:[126,145], bars:16, keyK:0.35, pickN:2,
                trans:['hardCut','filterSweep','classic'],                  tw:[.45,.35,.20] },
-  chill:     { label:'😌 Chill',          color:'#22c55e', bpm:[75,112],  bars:32, keyK:0.9, pickN:2,
-               trans:['classic','echoStutter'],                            tw:[.65,.35] },
+  chill:     { label:'😌 Chill',          color:'#22c55e', bpm:[75,112],  bars:48, keyK:0.9, pickN:2,
+               trans:['classic','filterSweep','echoStutter'],              tw:[.50,.25,.25] },
 };
 
 const TRANS_META = {
@@ -609,175 +610,316 @@ function pickWeighted(items,weights){
 }
 
 // ══════════════════════════════════════════════════════════════
-// TRANSITION ENGINES
+// TRANSITION ENGINES — Beat-grid aligned, 3-phase professional mixing
 // ══════════════════════════════════════════════════════════════
 let transRunning=false;
 let transStartTime=0,transTotalDur=0,transType='classic';
 
+// Returns the AudioContext time of the next bar boundary in a playing deck.
+// This ensures the incoming track's beat 1 aligns with the outgoing track's beat 1.
+function nextBarTime(deckId){
+  const d=D[deckId]; if(!d?.bpm) return actx.currentTime;
+  const barDur=4*(60/d.bpm), pos=getPos(deckId);
+  const posInBar=pos%barDur;
+  // Within 5% of bar end → snap to this bar, else wait for next
+  return actx.currentTime + ((posInBar/barDur)>0.05 ? barDur-posInBar : 0);
+}
+
+// Creates a new BufferSource for `id` and schedules it to start at `startAt` (AudioContext time).
+// Rate is set to match `fromBpm` so beats align after alignment.
+function armDeckAt(id, startAt, fromBpm){
+  const d=D[id];
+  d.rate = d.bpm ? fromBpm/d.bpm : 1.0;
+  stopSrc(id);
+  const src=actx.createBufferSource();
+  src.buffer=d.buffer; src.playbackRate.value=d.rate;
+  src.connect(d.eL);
+  src.start(startAt, 0);
+  src.onended=()=>{if(d.source===src){d.playing=false;updateTransUI(id);}};
+  d.source=src; d.startTime=startAt; d.startOffset=0; d.playing=true;
+  const ms=Math.max(0,(startAt-actx.currentTime)*1000+30);
+  setTimeout(()=>updateTransUI(id), ms);
+}
+
 function executeTransition(from,to,type,bars,onDone){
   if(transRunning){log('Transition in progress','w');return;}
-  transRunning=true;
-  transType=type;
-  const bpm=D[from].bpm||128,barDur=4*(60/bpm),dur=bars*barDur;
-  transTotalDur=dur;transStartTime=Date.now();
+  transRunning=true; transType=type;
+  const bpm=D[from].bpm||120, barDur=4*(60/bpm);
+
+  // ★ Beat-grid alignment: incoming starts exactly on the next bar boundary
+  const startAt=nextBarTime(from);
+  const transDur=bars*barDur;
+  transTotalDur=(startAt-actx.currentTime)+transDur;
+  transStartTime=Date.now();
+
   const tm=TRANS_META[type]||TRANS_META.classic;
   const badge=document.getElementById('trans-badge');
   if(badge){badge.textContent=tm.label;badge.style.color=tm.color;badge.style.borderColor=tm.color+'55';badge.style.background=tm.color+'18';}
-  // Start incoming if not playing
-  if(!D[to].playing){D[to].rate=D[to].bpm?D[from].bpm/D[to].bpm:1;playDeck(to,0);updateTransUI(to);}
-  // Dispatch
-  const done=()=>{transRunning=false;resetDeckFX(from);stopSrc(from);updateTransUI(from);
-    // Sync EQ knob UI back to 0 for the outgoing deck (audio resets, UI must match)
+
+  // Hard cut manages its own armDeckAt call (different timing)
+  if(type!=='hardCut') armDeckAt(to, startAt, bpm);
+
+  const done=()=>{
+    transRunning=false; resetDeckFX(from); stopSrc(from); updateTransUI(from);
     ['low','mid','high'].forEach(band=>{
       const k=document.querySelector(`.knob[data-deck="${from}"][data-band="${band}"]`);
       if(k){k.dataset.val=0;setKnobRot(k);}
       const el=document.getElementById(`kv-${band}-${from}`);if(el)el.textContent='0';
     });
-    const badge=document.getElementById('trans-badge');if(badge){badge.textContent='— IDLE';badge.style.color='var(--dim)';badge.style.borderColor='var(--border)';badge.style.background='var(--s2)';}
+    const b=document.getElementById('trans-badge');
+    if(b){b.textContent='— IDLE';b.style.color='var(--dim)';b.style.borderColor='var(--border)';b.style.background='var(--s2)';}
     const bar=document.getElementById('trans-bar');if(bar)bar.style.width='0%';
-    if(onDone)onDone();};
+    if(onDone)onDone();
+  };
+
   switch(type){
-    case 'filterSweep': doFilterSweep(from,to,bars,bpm,dur,done);break;
-    case 'echoStutter':  doEchoStutter(from,to,bars,bpm,dur,done);break;
-    case 'hardCut':      doHardCut(from,to,done);break;
-    case 'bassSwitch':   doBassSwitch(from,to,bars,bpm,dur,done);break;
-    default:             doClassic(from,to,bars,bpm,dur,done);break;
+    case 'filterSweep': doFilterSweep(from,to,bars,bpm,startAt,done);break;
+    case 'echoStutter':  doEchoStutter(from,to,bars,bpm,startAt,done);break;
+    case 'hardCut':      doHardCut(from,to,bpm,startAt,done);break;
+    case 'bassSwitch':   doBassSwitch(from,to,bars,bpm,startAt,done);break;
+    default:             doClassic(from,to,bars,bpm,startAt,done);break;
   }
-  log(`${tm.label} · ${bars} bars · ${dur.toFixed(1)}s`,'i');
+  log(`${tm.label} · ${bars} bars · ${transDur.toFixed(1)}s (beat-aligned)`,'i');
 }
 
-// ── CLASSIC BLEND ────────────────────────────────────────────
-// Smooth crossfade + bass swap at midpoint + HPF on outgoing tail
-function doClassic(from,to,bars,bpm,dur,done){
-  const now=actx.currentTime,mid=now+dur/2,end=now+dur;
-  const cfEl=document.getElementById('crossfader'),sp=parseFloat(cfEl.value)/100,ep=from==='a'?1:0;
-  D['a'].cfG.gain.cancelScheduledValues(now);D['b'].cfG.gain.cancelScheduledValues(now);
-  D['a'].cfG.gain.setValueAtTime(Math.cos(sp*Math.PI/2),now);D['a'].cfG.gain.linearRampToValueAtTime(Math.cos(ep*Math.PI/2),end);
-  D['b'].cfG.gain.setValueAtTime(Math.cos((1-sp)*Math.PI/2),now);D['b'].cfG.gain.linearRampToValueAtTime(Math.cos((1-ep)*Math.PI/2),end);
-  // Bass swap
-  D[to].eL.gain.cancelScheduledValues(now);D[to].eL.gain.setValueAtTime(-12,now);D[to].eL.gain.linearRampToValueAtTime(0,mid);
-  D[from].eL.gain.cancelScheduledValues(now);D[from].eL.gain.setValueAtTime(0,mid);D[from].eL.gain.linearRampToValueAtTime(-12,end);
-  // HPF creeps up on outgoing in last quarter for extra separation
-  const q3=now+dur*0.75;
-  D[from].hpf.frequency.cancelScheduledValues(now);D[from].hpf.frequency.setValueAtTime(20,q3);D[from].hpf.frequency.exponentialRampToValueAtTime(400,end);
-  animCF(from,to,sp,ep,dur,done);
+// ── CLASSIC BLEND ─────────────────────────────────────────────
+// Phase 1 (bars 0-8):   Incoming sneaks in at vol=0, bass cut. CF doesn't move. Listener barely notices.
+// Phase 2 (bars 8-mid): Incoming rises to full. CF starts moving. Bass swap at midpoint.
+// Phase 3 (mid-end):    CF sweeps to 100% incoming. Outgoing HPF rolls off and vanishes.
+function doClassic(from,to,bars,bpm,startAt,done){
+  const barDur=4*(60/bpm), endAt=startAt+bars*barDur;
+  const cfMoveAt=startAt+6*barDur;               // CF holds for first 6 bars
+  const bassSwap=startAt+(bars*0.5)*barDur;
+  const hpfAt=startAt+(bars*0.72)*barDur;
+
+  // ── INCOMING ─────────────────────────────────────────────
+  // Volume: silence → full over first 8 bars (listener barely notices the entry)
+  D[to].vol.gain.cancelScheduledValues(startAt-0.01);
+  D[to].vol.gain.setValueAtTime(0,startAt);
+  D[to].vol.gain.linearRampToValueAtTime(0.85,startAt+8*barDur);
+  // Bass: cut on entry, restores 2 bars after the swap
+  D[to].eL.gain.cancelScheduledValues(startAt-0.01);
+  D[to].eL.gain.setValueAtTime(-12,startAt);
+  D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+2*barDur);
+  // Crossfader send: holds at 0 until bar 6, then sweeps to 1
+  D[to].cfG.gain.cancelScheduledValues(startAt-0.01);
+  D[to].cfG.gain.setValueAtTime(0,startAt);
+  D[to].cfG.gain.setValueAtTime(0,cfMoveAt);
+  D[to].cfG.gain.linearRampToValueAtTime(1,endAt);
+
+  // ── OUTGOING ─────────────────────────────────────────────
+  D[from].vol.gain.cancelScheduledValues(startAt-0.01);
+  D[from].vol.gain.setValueAtTime(0.85,startAt);
+  // Bass: stays full until swap, then cuts over 2 bars
+  D[from].eL.gain.cancelScheduledValues(startAt-0.01);
+  D[from].eL.gain.setValueAtTime(0,bassSwap);
+  D[from].eL.gain.linearRampToValueAtTime(-12,bassSwap+2*barDur);
+  // CF send: holds at 1 until bar 6, then sweeps to 0
+  D[from].cfG.gain.cancelScheduledValues(startAt-0.01);
+  D[from].cfG.gain.setValueAtTime(1,startAt);
+  D[from].cfG.gain.setValueAtTime(1,cfMoveAt);
+  D[from].cfG.gain.linearRampToValueAtTime(0,endAt);
+  // HPF brightens outgoing in last 28%: it thins out naturally before dying
+  D[from].hpf.frequency.cancelScheduledValues(startAt-0.01);
+  D[from].hpf.frequency.setValueAtTime(20,hpfAt);
+  D[from].hpf.frequency.exponentialRampToValueAtTime(600,endAt);
+
+  animCFPhased(from,to,cfMoveAt,endAt,done);
 }
 
 // ── FILTER SWEEP ─────────────────────────────────────────────
-// Incoming track "blooms" in: starts dark (LPF 280Hz), sweeps open over 60% of transition
-// Crossfader waits then rushes in. Outgoing goes dark in parallel.
-function doFilterSweep(from,to,bars,bpm,dur,done){
-  const now=actx.currentTime,ep=from==='a'?1:0;
-  const sweepEnd=now+dur*0.65,fadeEnd=now+dur;
-  // Incoming LPF sweeps open — start at 900 Hz (audible but not muffled) rather than 280 Hz
-  D[to].lpf.frequency.cancelScheduledValues(now);D[to].lpf.frequency.setValueAtTime(900,now);D[to].lpf.frequency.exponentialRampToValueAtTime(22050,sweepEnd);
-  // Incoming bass cut until half of sweep
-  D[to].eL.gain.cancelScheduledValues(now);D[to].eL.gain.setValueAtTime(-10,now);D[to].eL.gain.linearRampToValueAtTime(0,now+dur*0.5);
-  // Outgoing LPF closes in last 30%
-  D[from].lpf.frequency.cancelScheduledValues(now);D[from].lpf.frequency.setValueAtTime(22050,now+dur*0.7);D[from].lpf.frequency.exponentialRampToValueAtTime(200,fadeEnd);
-  // Crossfader delayed start – sits on A/B until sweep is underway, then moves
-  const sp=parseFloat(document.getElementById('crossfader').value)/100,cfDelay=dur*0.25;
-  const cfDur=dur*0.75;
-  D['a'].cfG.gain.cancelScheduledValues(now);D['b'].cfG.gain.cancelScheduledValues(now);
-  D['a'].cfG.gain.setValueAtTime(Math.cos(sp*Math.PI/2),now);D['a'].cfG.gain.setValueAtTime(Math.cos(sp*Math.PI/2),now+cfDelay);D['a'].cfG.gain.linearRampToValueAtTime(Math.cos(ep*Math.PI/2),fadeEnd);
-  D['b'].cfG.gain.setValueAtTime(Math.cos((1-sp)*Math.PI/2),now);D['b'].cfG.gain.setValueAtTime(Math.cos((1-sp)*Math.PI/2),now+cfDelay);D['b'].cfG.gain.linearRampToValueAtTime(Math.cos((1-ep)*Math.PI/2),fadeEnd);
-  animCF(from,to,sp,ep,dur,done);
+// Same 3-phase as Classic but incoming enters through a LPF that sweeps
+// 1200Hz → full open over bars 1-12. Creates a dramatic "bloom" effect.
+function doFilterSweep(from,to,bars,bpm,startAt,done){
+  const barDur=4*(60/bpm), endAt=startAt+bars*barDur;
+  const sweepEnd=startAt+12*barDur;
+  const bassSwap=startAt+(bars*0.5)*barDur;
+  const cfMoveAt=startAt+8*barDur;               // CF delayed further (let the bloom land first)
+  const hpfAt=startAt+(bars*0.72)*barDur;
+
+  D[to].vol.gain.cancelScheduledValues(startAt-0.01);
+  D[to].vol.gain.setValueAtTime(0.1,startAt);
+  D[to].vol.gain.linearRampToValueAtTime(0.85,sweepEnd);
+
+  D[to].lpf.frequency.cancelScheduledValues(startAt-0.01);
+  D[to].lpf.frequency.setValueAtTime(1200,startAt);
+  D[to].lpf.frequency.exponentialRampToValueAtTime(22050,sweepEnd);
+
+  D[to].eL.gain.cancelScheduledValues(startAt-0.01);
+  D[to].eL.gain.setValueAtTime(-12,startAt);
+  D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+2*barDur);
+
+  D[to].cfG.gain.cancelScheduledValues(startAt-0.01);
+  D[to].cfG.gain.setValueAtTime(0,startAt);
+  D[to].cfG.gain.setValueAtTime(0,cfMoveAt);
+  D[to].cfG.gain.linearRampToValueAtTime(1,endAt);
+
+  D[from].vol.gain.cancelScheduledValues(startAt-0.01);
+  D[from].vol.gain.setValueAtTime(0.85,startAt);
+  D[from].eL.gain.cancelScheduledValues(startAt-0.01);
+  D[from].eL.gain.setValueAtTime(0,bassSwap);
+  D[from].eL.gain.linearRampToValueAtTime(-12,bassSwap+2*barDur);
+  D[from].lpf.frequency.cancelScheduledValues(startAt-0.01);
+  D[from].lpf.frequency.setValueAtTime(22050,startAt+(bars*0.7)*barDur);
+  D[from].lpf.frequency.exponentialRampToValueAtTime(300,endAt);
+  D[from].cfG.gain.cancelScheduledValues(startAt-0.01);
+  D[from].cfG.gain.setValueAtTime(1,startAt);
+  D[from].cfG.gain.setValueAtTime(1,cfMoveAt);
+  D[from].cfG.gain.linearRampToValueAtTime(0,endAt);
+  D[from].hpf.frequency.cancelScheduledValues(startAt-0.01);
+  D[from].hpf.frequency.setValueAtTime(20,hpfAt);
+  D[from].hpf.frequency.exponentialRampToValueAtTime(600,endAt);
+
+  animCFPhased(from,to,cfMoveAt,endAt,done);
 }
 
 // ── ECHO STUTTER ─────────────────────────────────────────────
-// Outgoing track stutters rhythmically in the last ~2 bars, B comes in crisp on the last beat.
-function doEchoStutter(from,to,bars,bpm,dur,done){
-  const now=actx.currentTime,beat=60/bpm,step=beat/2;
-  const stutterBars=Math.min(2,bars/4),stutterDur=stutterBars*4*beat;
-  const stutterStart=now+dur-stutterDur,endT=now+dur;
-  // Before stutter: crossfader stays, incoming plays quietly
-  const sp=parseFloat(document.getElementById('crossfader').value)/100,ep=from==='a'?1:0;
-  D['a'].cfG.gain.cancelScheduledValues(now);D['b'].cfG.gain.cancelScheduledValues(now);
-  // Incoming gets a tiny amount during body of transition, then full at end
-  D['a'].cfG.gain.setValueAtTime(Math.cos(sp*Math.PI/2),now);
-  D['b'].cfG.gain.setValueAtTime(Math.cos((1-sp)*Math.PI/2),now);
-  // Stutter outgoing volume: rhythmic pumping
-  D[from].vol.gain.cancelScheduledValues(stutterStart);
-  D[from].vol.gain.setValueAtTime(0.85,stutterStart);
-  let t=stutterStart;const steps=Math.round(stutterDur/step);
-  for(let i=0;i<steps;i++){
-    const amp=0.85*Math.pow(0.6,i);
+// Standard 3-phase blend but the outgoing track stutters rhythmically
+// in the last 3 bars — creates a dramatic exit before the new track rises.
+function doEchoStutter(from,to,bars,bpm,startAt,done){
+  const barDur=4*(60/bpm), endAt=startAt+bars*barDur;
+  const bassSwap=startAt+(bars*0.5)*barDur;
+  const cfMoveAt=startAt+6*barDur;
+  const stutterAt=startAt+(bars-3)*barDur;
+  const halfBeat=(60/bpm)/2;
+
+  D[to].vol.gain.cancelScheduledValues(startAt-0.01);
+  D[to].vol.gain.setValueAtTime(0,startAt);
+  D[to].vol.gain.linearRampToValueAtTime(0.85,startAt+8*barDur);
+  D[to].eL.gain.cancelScheduledValues(startAt-0.01);
+  D[to].eL.gain.setValueAtTime(-12,startAt);
+  D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+2*barDur);
+  D[to].cfG.gain.cancelScheduledValues(startAt-0.01);
+  D[to].cfG.gain.setValueAtTime(0,startAt);
+  D[to].cfG.gain.setValueAtTime(0,cfMoveAt);
+  D[to].cfG.gain.linearRampToValueAtTime(1,endAt);
+
+  D[from].vol.gain.cancelScheduledValues(startAt-0.01);
+  D[from].vol.gain.setValueAtTime(0.85,startAt);
+  D[from].eL.gain.cancelScheduledValues(startAt-0.01);
+  D[from].eL.gain.setValueAtTime(0,bassSwap);
+  D[from].eL.gain.linearRampToValueAtTime(-10,bassSwap+2*barDur);
+  D[from].cfG.gain.cancelScheduledValues(startAt-0.01);
+  D[from].cfG.gain.setValueAtTime(1,startAt);
+  D[from].cfG.gain.setValueAtTime(1,cfMoveAt);
+  D[from].cfG.gain.linearRampToValueAtTime(0.15,stutterAt);
+  D[from].cfG.gain.linearRampToValueAtTime(0,endAt);
+  // Stutter: decaying rhythmic pumps on outgoing in last 3 bars
+  D[from].vol.gain.cancelScheduledValues(stutterAt);
+  D[from].vol.gain.setValueAtTime(0.85,stutterAt);
+  const nSteps=Math.round((endAt-stutterAt)/halfBeat);
+  for(let i=0;i<nSteps;i++){
+    const t=stutterAt+i*halfBeat, amp=0.85*Math.pow(0.62,i);
     D[from].vol.gain.setValueAtTime(amp,t);
-    D[from].vol.gain.linearRampToValueAtTime(amp*0.05,t+step*0.6);
-    t+=step;
+    D[from].vol.gain.linearRampToValueAtTime(amp*0.04,t+halfBeat*0.65);
   }
-  D[from].vol.gain.linearRampToValueAtTime(0,endT);
-  // Snap crossfader to incoming at stutter start
-  D['a'].cfG.gain.setValueAtTime(Math.cos(sp*Math.PI/2),stutterStart);
-  D['a'].cfG.gain.linearRampToValueAtTime(Math.cos(ep*Math.PI/2),endT);
-  D['b'].cfG.gain.setValueAtTime(Math.cos((1-sp)*Math.PI/2),stutterStart);
-  D['b'].cfG.gain.linearRampToValueAtTime(Math.cos((1-ep)*Math.PI/2),endT);
-  // Animate CF UI
-  animCF(from,to,sp,ep,dur,done);
+  D[from].vol.gain.linearRampToValueAtTime(0,endAt);
+
+  animCFPhased(from,to,cfMoveAt,endAt,done);
 }
 
 // ── HARD CUT ─────────────────────────────────────────────────
-// Quick 1-bar build on outgoing (HPF sweep), then instant cut. Energetic.
-function doHardCut(from,to,done){
-  const bpm=D[from].bpm||128,barDur=4*(60/bpm);
-  const now=actx.currentTime,cutAt=now+barDur;
-  // Short HPF rise on outgoing (1 bar)
-  D[from].hpf.frequency.cancelScheduledValues(now);D[from].hpf.frequency.setValueAtTime(20,now);D[from].hpf.frequency.exponentialRampToValueAtTime(800,cutAt);
-  // Volume drops to 0 at cut
-  D[from].vol.gain.cancelScheduledValues(now);D[from].vol.gain.setValueAtTime(0.85,now);D[from].vol.gain.linearRampToValueAtTime(0,cutAt-0.02);
-  // Incoming gets full volume and crossfader snaps
+// For key clashes: outgoing gets a 1-bar HPF sweep, then snaps to zero.
+// Incoming starts exactly on the next bar boundary — clean, energetic.
+function doHardCut(from,to,bpm,startAt,done){
+  const barDur=4*(60/bpm);
+  const preBeat=Math.max(actx.currentTime, startAt-barDur);
+  // Arm incoming at the bar boundary
+  armDeckAt(to, startAt, bpm);
+  D[to].vol.gain.cancelScheduledValues(startAt-0.01);
+  D[to].vol.gain.setValueAtTime(0.85,startAt);
+  // Outgoing: HPF sweep starts 1 bar early, vol → 0 at cut point
+  D[from].hpf.frequency.cancelScheduledValues(preBeat);
+  D[from].hpf.frequency.setValueAtTime(20,preBeat);
+  D[from].hpf.frequency.exponentialRampToValueAtTime(900,startAt-0.03);
+  D[from].vol.gain.cancelScheduledValues(preBeat);
+  D[from].vol.gain.setValueAtTime(0.85,preBeat);
+  D[from].vol.gain.linearRampToValueAtTime(0,startAt);
+  // CF snaps at cut point
   const ep=from==='a'?1:0;
-  D['a'].cfG.gain.cancelScheduledValues(now);D['b'].cfG.gain.cancelScheduledValues(now);
-  D['a'].cfG.gain.setValueAtTime(Math.cos(ep*Math.PI/2),cutAt);
-  D['b'].cfG.gain.setValueAtTime(Math.cos((1-ep)*Math.PI/2),cutAt);
-  document.getElementById('crossfader').value=ep*100;
-  setTimeout(done,barDur*1000+100);
+  D['a'].cfG.gain.cancelScheduledValues(startAt-0.01);
+  D['b'].cfG.gain.cancelScheduledValues(startAt-0.01);
+  D['a'].cfG.gain.setValueAtTime(Math.cos(ep*Math.PI/2),startAt);
+  D['b'].cfG.gain.setValueAtTime(Math.cos((1-ep)*Math.PI/2),startAt);
+  const cfEl=document.getElementById('crossfader');
+  setTimeout(()=>{cfEl.value=ep*100;},(startAt-actx.currentTime)*1000+50);
+  setTimeout(done,(startAt-actx.currentTime)*1000+300);
 }
 
 // ── BASS SWITCH ──────────────────────────────────────────────
-// Incoming enters highs+mids only (bass cut). At midpoint: hard bass swap. Clean and groovy.
-function doBassSwitch(from,to,bars,bpm,dur,done){
-  const now=actx.currentTime,mid=now+dur/2,end=now+dur;
-  const sp=parseFloat(document.getElementById('crossfader').value)/100,ep=from==='a'?1:0;
-  // Incoming: mids+highs first, bass waits until midpoint swap
-  D[to].eL.gain.cancelScheduledValues(now);D[to].eL.gain.setValueAtTime(-12,now);D[to].eL.gain.setValueAtTime(-12,mid-0.05);D[to].eL.gain.linearRampToValueAtTime(0,mid+0.05);
-  // Outgoing: bass cuts hard at midpoint
-  D[from].eL.gain.cancelScheduledValues(now);D[from].eL.gain.setValueAtTime(0,now);D[from].eL.gain.setValueAtTime(0,mid-0.05);D[from].eL.gain.linearRampToValueAtTime(-12,mid+0.1);
-  // Crossfade: move steadily but mids crossfade starts earlier, overall clean
-  D['a'].cfG.gain.cancelScheduledValues(now);D['b'].cfG.gain.cancelScheduledValues(now);
-  D['a'].cfG.gain.setValueAtTime(Math.cos(sp*Math.PI/2),now);D['a'].cfG.gain.linearRampToValueAtTime(Math.cos(ep*Math.PI/2),end);
-  D['b'].cfG.gain.setValueAtTime(Math.cos((1-sp)*Math.PI/2),now);D['b'].cfG.gain.linearRampToValueAtTime(Math.cos((1-ep)*Math.PI/2),end);
-  animCF(from,to,sp,ep,dur,done);
+// Incoming enters with highs+mids only (no kick/bass). At the exact midpoint
+// bar: bass snaps from outgoing to incoming in one beat. Groovy and precise.
+function doBassSwitch(from,to,bars,bpm,startAt,done){
+  const barDur=4*(60/bpm), endAt=startAt+bars*barDur;
+  const bassSwap=startAt+(bars*0.5)*barDur;
+  const cfMoveAt=startAt+4*barDur;
+  const hpfAt=startAt+(bars*0.72)*barDur;
+
+  D[to].vol.gain.cancelScheduledValues(startAt-0.01);
+  D[to].vol.gain.setValueAtTime(0,startAt);
+  D[to].vol.gain.linearRampToValueAtTime(0.85,startAt+6*barDur);
+  // Bass stays cut until the exact swap bar — then snaps in (one bar ramp)
+  D[to].eL.gain.cancelScheduledValues(startAt-0.01);
+  D[to].eL.gain.setValueAtTime(-12,startAt);
+  D[to].eL.gain.setValueAtTime(-12,bassSwap-0.02);
+  D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+barDur);
+  D[to].cfG.gain.cancelScheduledValues(startAt-0.01);
+  D[to].cfG.gain.setValueAtTime(0,startAt);
+  D[to].cfG.gain.setValueAtTime(0,cfMoveAt);
+  D[to].cfG.gain.linearRampToValueAtTime(1,endAt);
+
+  D[from].vol.gain.cancelScheduledValues(startAt-0.01);
+  D[from].vol.gain.setValueAtTime(0.85,startAt);
+  // Outgoing bass cuts on the same bar
+  D[from].eL.gain.cancelScheduledValues(startAt-0.01);
+  D[from].eL.gain.setValueAtTime(0,bassSwap-0.02);
+  D[from].eL.gain.linearRampToValueAtTime(-12,bassSwap+barDur);
+  D[from].cfG.gain.cancelScheduledValues(startAt-0.01);
+  D[from].cfG.gain.setValueAtTime(1,startAt);
+  D[from].cfG.gain.setValueAtTime(1,cfMoveAt);
+  D[from].cfG.gain.linearRampToValueAtTime(0,endAt);
+  D[from].hpf.frequency.cancelScheduledValues(startAt-0.01);
+  D[from].hpf.frequency.setValueAtTime(20,hpfAt);
+  D[from].hpf.frequency.exponentialRampToValueAtTime(600,endAt);
+
+  animCFPhased(from,to,cfMoveAt,endAt,done);
 }
 
-// ── CF ANIMATOR (shared) ──────────────────────────────────────
-function animCF(from,to,startP,endP,dur,done){
+// ── CF ANIMATOR ───────────────────────────────────────────────
+// Holds the slider at the starting position until cfMoveAt (AudioContext time),
+// then sweeps with an ease-in-out curve to the end position.
+function animCFPhased(from,to,cfMoveAt,endAt,done){
   const cfEl=document.getElementById('crossfader');
-  const t0=Date.now();
+  const ep=from==='a'?100:0, sp=parseFloat(cfEl.value);
+  const moveDur=endAt-cfMoveAt;
   (function tick(){
-    const el=(Date.now()-t0)/1000;
-    if(el<dur){
-      cfEl.value=(startP+(endP-startP)*(el/dur))*100;
-      requestAnimationFrame(tick);
-    } else {
-      cfEl.value=endP*100;
-      done();
+    const now=actx.currentTime;
+    if(now>=endAt){cfEl.value=ep;done();return;}
+    if(now>=cfMoveAt){
+      const t=Math.min(1,(now-cfMoveAt)/moveDur);
+      const e=t<0.5?2*t*t:1-Math.pow(-2*t+2,2)/2; // ease-in-out
+      cfEl.value=sp+(ep-sp)*e;
     }
+    requestAnimationFrame(tick);
   })();
+
+  // Legacy done() path if endAt already passed (shouldn't happen but safety net)
+  setTimeout(()=>{if(transRunning&&transType===transType){cfEl.value=ep;done();}},
+    (endAt-actx.currentTime)*1000+500);
 }
 
-// Unified trigger for manual mode
+// Unified trigger for manual mode button
 function triggerTransition(from,to,type){
   ensureCtx();
-  const bars=parseInt(document.getElementById('trans-bars').value)||16;
   if(!D[from]?.playing){log('Start Deck '+from.toUpperCase()+' first','w');return;}
   if(!D[to]?.buffer){log('Load a track on Deck '+to.toUpperCase(),'w');return;}
+  const bars=parseInt(document.getElementById('trans-bars').value)||32;
   const btn=document.getElementById('trans-btn');
   if(btn)btn.classList.add('running');
-  executeTransition(from,to,type||'classic',bars,()=>{
-    if(btn)btn.classList.remove('running');
-  });
+  executeTransition(from,to,type||'classic',bars,()=>{if(btn)btn.classList.remove('running');});
 }
+// Fallback for any stray animCF call
+function animCF(from,to,sp,ep,dur,done){ animCFPhased(from,to,actx.currentTime,actx.currentTime+dur,done); }
 
 // ══════════════════════════════════════════════════════════════
 // TRACK SELECTION ALGORITHM
@@ -886,14 +1028,16 @@ const DJ={
   tick(id,pos,remaining){
     if(id!==DJ.curDeck||!DJ.active)return;
     const v=VIBES[selectedVibe];
-    const barsEl=document.getElementById('auto-bars'),bars=parseInt(barsEl?.value||16);
-    const bpm=D[DJ.curDeck].bpm||128;
+    const barsEl=document.getElementById('auto-bars'),bars=parseInt(barsEl?.value||32);
+    const bpm=D[DJ.curDeck].bpm||120;
     const trackDur=D[DJ.curDeck].duration||60;
-    // Cap transition window at 45% of track duration so it never fires before a track has played
-    const rawTrans=bars*4*(60/bpm);
+    const barDur=4*(60/bpm);
+    // Raw transition duration + 1 bar buffer for beat-grid alignment wait
+    const rawTrans=bars*barDur+barDur;
+    // Never fire earlier than 45% remaining, so the track plays long enough
     const transDur=Math.min(rawTrans, trackDur*0.45);
-    // Minimum play time before transition is allowed (at least 2 bars or 15% of track)
-    const minPlayed=Math.max(4*(60/bpm)*2, trackDur*0.15);
+    // Minimum play time: at least 8 bars or 20% of track before transition fires
+    const minPlayed=Math.max(barDur*8, trackDur*0.20);
     const nextIdx=DJ.curIdx+1;
 
     // Keep queue filled ahead
