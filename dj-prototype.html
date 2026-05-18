@@ -503,7 +503,12 @@ const D={};
 function ensureCtx(){
   if(actx)return;
   actx=new(window.AudioContext||window.webkitAudioContext)();
-  masterGain=actx.createGain();masterGain.gain.value=0.85;masterGain.connect(actx.destination);
+  masterGain=actx.createGain();masterGain.gain.value=0.72; // Lower master for headroom
+  // Safety limiter: transparent brickwall above -4 dBFS, prevents any clipping
+  const limiter=actx.createDynamicsCompressor();
+  limiter.threshold.value=-4;limiter.knee.value=2;limiter.ratio.value=20;
+  limiter.attack.value=0.001;limiter.release.value=0.08;
+  masterGain.connect(limiter);limiter.connect(actx.destination);
   makeDeck('a');makeDeck('b');
 }
 
@@ -523,7 +528,8 @@ function makeDeck(id){
   // Chain: source → eL → eM → eH → lpf → hpf → vol → an → cfG → master
   eL.connect(eM);eM.connect(eH);eH.connect(lpf);lpf.connect(hpf);hpf.connect(vol);vol.connect(an);an.connect(cfG);cfG.connect(masterGain);
   D[id]={buffer:null,source:null,eL,eM,eH,lpf,hpf,vol,cfG,an,
-          bpm:null,key:null,camelot:null,startTime:0,startOffset:0,rate:1,playing:false,duration:0};
+          bpm:null,key:null,camelot:null,startTime:0,startOffset:0,rate:1,playing:false,duration:0,
+          normGain:0.85}; // per-track gain normalisation target
 }
 
 function playDeck(id,offset=0){
@@ -546,7 +552,16 @@ function resetDeckFX(id){
   d.lpf.frequency.cancelScheduledValues(now);d.lpf.frequency.setValueAtTime(22050,now);
   d.hpf.frequency.cancelScheduledValues(now);d.hpf.frequency.setValueAtTime(20,now);
   d.eL.gain.cancelScheduledValues(now);d.eL.gain.setValueAtTime(0,now);
-  d.vol.gain.cancelScheduledValues(now);d.vol.gain.setValueAtTime(0.85,now);
+  d.eM.gain.cancelScheduledValues(now);d.eM.gain.setValueAtTime(0,now);
+  d.eH.gain.cancelScheduledValues(now);d.eH.gain.setValueAtTime(0,now);
+  d.vol.gain.cancelScheduledValues(now);d.vol.gain.setValueAtTime(d.normGain||0.85,now);
+}
+
+// Compute per-track normalisation gain. Target RMS = -12 dBFS (0.25 linear).
+// Clamps between 0.5× and 2.0× to avoid extreme boosts or cuts.
+function calcNormGain(buf){
+  const TARGET=0.25, rms=estimateEnergy(buf);
+  return Math.min(2.0,Math.max(0.5,TARGET/Math.max(rms,0.005)));
 }
 
 function getPos(id){
@@ -630,6 +645,7 @@ function nextBarTime(deckId){
 function armDeckAt(id, startAt, fromBpm){
   const d=D[id];
   d.rate = d.bpm ? fromBpm/d.bpm : 1.0;
+  d.baseRate = d.rate;   // nudge() uses this to cap at ±8%
   stopSrc(id);
   const src=actx.createBufferSource();
   src.buffer=d.buffer; src.playbackRate.value=d.rate;
@@ -688,20 +704,26 @@ function executeTransition(from,to,type,bars,onDone){
 // Phase 3 (mid-end):    CF sweeps to 100% incoming. Outgoing HPF rolls off and vanishes.
 function doClassic(from,to,bars,bpm,startAt,done){
   const barDur=4*(60/bpm), endAt=startAt+bars*barDur;
-  const cfMoveAt=startAt+6*barDur;               // CF holds for first 6 bars
+  const ng_to=D[to].normGain||0.85, ng_from=D[from].normGain||0.85;
+  const cfMoveAt=startAt+6*barDur;
   const bassSwap=startAt+(bars*0.5)*barDur;
-  const hpfAt=startAt+(bars*0.72)*barDur;
+  const hpfAt=startAt+(bars*0.80)*barDur;   // 80% start (was 72%) — less abrupt
 
   // ── INCOMING ─────────────────────────────────────────────
-  // Volume: silence → full over first 8 bars (listener barely notices the entry)
   D[to].vol.gain.cancelScheduledValues(startAt-0.01);
   D[to].vol.gain.setValueAtTime(0,startAt);
-  D[to].vol.gain.linearRampToValueAtTime(0.85,startAt+8*barDur);
-  // Bass: cut on entry, restores 2 bars after the swap
+  D[to].vol.gain.linearRampToValueAtTime(ng_to,startAt+8*barDur);
+  // Bass EQ cut + physical HPF: dual isolation prevents sub-bass bleed
   D[to].eL.gain.cancelScheduledValues(startAt-0.01);
   D[to].eL.gain.setValueAtTime(-12,startAt);
-  D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+2*barDur);
-  // Crossfader send: holds at 0 until bar 6, then sweeps to 1
+  D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+barDur);
+  D[to].hpf.frequency.cancelScheduledValues(startAt-0.01);
+  D[to].hpf.frequency.setValueAtTime(180,startAt);
+  D[to].hpf.frequency.exponentialRampToValueAtTime(20,bassSwap+barDur);
+  // Slight high cut on entry prevents brightness clash with outgoing highs
+  D[to].eH.gain.cancelScheduledValues(startAt-0.01);
+  D[to].eH.gain.setValueAtTime(-3,startAt);
+  D[to].eH.gain.linearRampToValueAtTime(0,startAt+8*barDur);
   D[to].cfG.gain.cancelScheduledValues(startAt-0.01);
   D[to].cfG.gain.setValueAtTime(0,startAt);
   D[to].cfG.gain.setValueAtTime(0,cfMoveAt);
@@ -709,20 +731,22 @@ function doClassic(from,to,bars,bpm,startAt,done){
 
   // ── OUTGOING ─────────────────────────────────────────────
   D[from].vol.gain.cancelScheduledValues(startAt-0.01);
-  D[from].vol.gain.setValueAtTime(0.85,startAt);
-  // Bass: stays full until swap, then cuts over 2 bars
+  D[from].vol.gain.setValueAtTime(ng_from,startAt);
   D[from].eL.gain.cancelScheduledValues(startAt-0.01);
   D[from].eL.gain.setValueAtTime(0,bassSwap);
-  D[from].eL.gain.linearRampToValueAtTime(-12,bassSwap+2*barDur);
-  // CF send: holds at 1 until bar 6, then sweeps to 0
+  D[from].eL.gain.linearRampToValueAtTime(-12,bassSwap+barDur);
+  // Gentle high cut in last 35%: prevents brightness buildup during blend
+  D[from].eH.gain.cancelScheduledValues(startAt-0.01);
+  D[from].eH.gain.setValueAtTime(0,startAt+(bars*0.65)*barDur);
+  D[from].eH.gain.linearRampToValueAtTime(-4,endAt);
   D[from].cfG.gain.cancelScheduledValues(startAt-0.01);
   D[from].cfG.gain.setValueAtTime(1,startAt);
   D[from].cfG.gain.setValueAtTime(1,cfMoveAt);
   D[from].cfG.gain.linearRampToValueAtTime(0,endAt);
-  // HPF brightens outgoing in last 28%: it thins out naturally before dying
+  // HPF: starts at 80%, gentle roll to 300Hz max (was 600Hz — too aggressive)
   D[from].hpf.frequency.cancelScheduledValues(startAt-0.01);
   D[from].hpf.frequency.setValueAtTime(20,hpfAt);
-  D[from].hpf.frequency.exponentialRampToValueAtTime(600,endAt);
+  D[from].hpf.frequency.exponentialRampToValueAtTime(300,endAt);
 
   animCFPhased(from,to,cfMoveAt,endAt,done);
 }
@@ -732,43 +756,52 @@ function doClassic(from,to,bars,bpm,startAt,done){
 // 1200Hz → full open over bars 1-12. Creates a dramatic "bloom" effect.
 function doFilterSweep(from,to,bars,bpm,startAt,done){
   const barDur=4*(60/bpm), endAt=startAt+bars*barDur;
+  const ng_to=D[to].normGain||0.85, ng_from=D[from].normGain||0.85;
   const sweepEnd=startAt+12*barDur;
   const bassSwap=startAt+(bars*0.5)*barDur;
-  const cfMoveAt=startAt+8*barDur;               // CF delayed further (let the bloom land first)
-  const hpfAt=startAt+(bars*0.72)*barDur;
+  const cfMoveAt=startAt+8*barDur;
+  const hpfAt=startAt+(bars*0.80)*barDur;
 
+  // INCOMING: LPF bloom + bass isolation via HPF + EQ cut
   D[to].vol.gain.cancelScheduledValues(startAt-0.01);
   D[to].vol.gain.setValueAtTime(0.1,startAt);
-  D[to].vol.gain.linearRampToValueAtTime(0.85,sweepEnd);
-
+  D[to].vol.gain.linearRampToValueAtTime(ng_to,sweepEnd);
   D[to].lpf.frequency.cancelScheduledValues(startAt-0.01);
   D[to].lpf.frequency.setValueAtTime(1200,startAt);
   D[to].lpf.frequency.exponentialRampToValueAtTime(22050,sweepEnd);
-
   D[to].eL.gain.cancelScheduledValues(startAt-0.01);
   D[to].eL.gain.setValueAtTime(-12,startAt);
-  D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+2*barDur);
-
+  D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+barDur);
+  // Physical HPF blocks sub-bass bleed during the bloom phase
+  D[to].hpf.frequency.cancelScheduledValues(startAt-0.01);
+  D[to].hpf.frequency.setValueAtTime(180,startAt);
+  D[to].hpf.frequency.exponentialRampToValueAtTime(20,bassSwap+barDur);
   D[to].cfG.gain.cancelScheduledValues(startAt-0.01);
   D[to].cfG.gain.setValueAtTime(0,startAt);
   D[to].cfG.gain.setValueAtTime(0,cfMoveAt);
   D[to].cfG.gain.linearRampToValueAtTime(1,endAt);
 
+  // OUTGOING: LPF narrows the outgoing to complement the incoming bloom
   D[from].vol.gain.cancelScheduledValues(startAt-0.01);
-  D[from].vol.gain.setValueAtTime(0.85,startAt);
+  D[from].vol.gain.setValueAtTime(ng_from,startAt);
   D[from].eL.gain.cancelScheduledValues(startAt-0.01);
   D[from].eL.gain.setValueAtTime(0,bassSwap);
-  D[from].eL.gain.linearRampToValueAtTime(-12,bassSwap+2*barDur);
+  D[from].eL.gain.linearRampToValueAtTime(-12,bassSwap+barDur);
   D[from].lpf.frequency.cancelScheduledValues(startAt-0.01);
   D[from].lpf.frequency.setValueAtTime(22050,startAt+(bars*0.7)*barDur);
   D[from].lpf.frequency.exponentialRampToValueAtTime(300,endAt);
+  // High cut in last third: prevents muddiness as outgoing thins out
+  D[from].eH.gain.cancelScheduledValues(startAt-0.01);
+  D[from].eH.gain.setValueAtTime(0,startAt+(bars*0.65)*barDur);
+  D[from].eH.gain.linearRampToValueAtTime(-4,endAt);
   D[from].cfG.gain.cancelScheduledValues(startAt-0.01);
   D[from].cfG.gain.setValueAtTime(1,startAt);
   D[from].cfG.gain.setValueAtTime(1,cfMoveAt);
   D[from].cfG.gain.linearRampToValueAtTime(0,endAt);
+  // Soft HPF: start late, cap at 300Hz to avoid thinning the outgoing too soon
   D[from].hpf.frequency.cancelScheduledValues(startAt-0.01);
   D[from].hpf.frequency.setValueAtTime(20,hpfAt);
-  D[from].hpf.frequency.exponentialRampToValueAtTime(600,endAt);
+  D[from].hpf.frequency.exponentialRampToValueAtTime(300,endAt);
 
   animCFPhased(from,to,cfMoveAt,endAt,done);
 }
@@ -778,38 +811,44 @@ function doFilterSweep(from,to,bars,bpm,startAt,done){
 // in the last 3 bars — creates a dramatic exit before the new track rises.
 function doEchoStutter(from,to,bars,bpm,startAt,done){
   const barDur=4*(60/bpm), endAt=startAt+bars*barDur;
+  const ng_to=D[to].normGain||0.85, ng_from=D[from].normGain||0.85;
   const bassSwap=startAt+(bars*0.5)*barDur;
   const cfMoveAt=startAt+6*barDur;
   const stutterAt=startAt+(bars-3)*barDur;
   const halfBeat=(60/bpm)/2;
 
+  // INCOMING: bass isolation via HPF + EQ cut until swap
   D[to].vol.gain.cancelScheduledValues(startAt-0.01);
   D[to].vol.gain.setValueAtTime(0,startAt);
-  D[to].vol.gain.linearRampToValueAtTime(0.85,startAt+8*barDur);
+  D[to].vol.gain.linearRampToValueAtTime(ng_to,startAt+8*barDur);
   D[to].eL.gain.cancelScheduledValues(startAt-0.01);
   D[to].eL.gain.setValueAtTime(-12,startAt);
-  D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+2*barDur);
+  D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+barDur);
+  D[to].hpf.frequency.cancelScheduledValues(startAt-0.01);
+  D[to].hpf.frequency.setValueAtTime(180,startAt);
+  D[to].hpf.frequency.exponentialRampToValueAtTime(20,bassSwap+barDur);
   D[to].cfG.gain.cancelScheduledValues(startAt-0.01);
   D[to].cfG.gain.setValueAtTime(0,startAt);
   D[to].cfG.gain.setValueAtTime(0,cfMoveAt);
   D[to].cfG.gain.linearRampToValueAtTime(1,endAt);
 
+  // OUTGOING: bass cuts at swap, then stutter exit
   D[from].vol.gain.cancelScheduledValues(startAt-0.01);
-  D[from].vol.gain.setValueAtTime(0.85,startAt);
+  D[from].vol.gain.setValueAtTime(ng_from,startAt);
   D[from].eL.gain.cancelScheduledValues(startAt-0.01);
   D[from].eL.gain.setValueAtTime(0,bassSwap);
-  D[from].eL.gain.linearRampToValueAtTime(-10,bassSwap+2*barDur);
+  D[from].eL.gain.linearRampToValueAtTime(-10,bassSwap+barDur);
   D[from].cfG.gain.cancelScheduledValues(startAt-0.01);
   D[from].cfG.gain.setValueAtTime(1,startAt);
   D[from].cfG.gain.setValueAtTime(1,cfMoveAt);
   D[from].cfG.gain.linearRampToValueAtTime(0.15,stutterAt);
   D[from].cfG.gain.linearRampToValueAtTime(0,endAt);
-  // Stutter: decaying rhythmic pumps on outgoing in last 3 bars
+  // Stutter: decaying rhythmic pumps in last 3 bars
   D[from].vol.gain.cancelScheduledValues(stutterAt);
-  D[from].vol.gain.setValueAtTime(0.85,stutterAt);
+  D[from].vol.gain.setValueAtTime(ng_from,stutterAt);
   const nSteps=Math.round((endAt-stutterAt)/halfBeat);
   for(let i=0;i<nSteps;i++){
-    const t=stutterAt+i*halfBeat, amp=0.85*Math.pow(0.62,i);
+    const t=stutterAt+i*halfBeat, amp=ng_from*Math.pow(0.62,i);
     D[from].vol.gain.setValueAtTime(amp,t);
     D[from].vol.gain.linearRampToValueAtTime(amp*0.04,t+halfBeat*0.65);
   }
@@ -823,17 +862,17 @@ function doEchoStutter(from,to,bars,bpm,startAt,done){
 // Incoming starts exactly on the next bar boundary — clean, energetic.
 function doHardCut(from,to,bpm,startAt,done){
   const barDur=4*(60/bpm);
+  const ng_to=D[to].normGain||0.85, ng_from=D[from].normGain||0.85;
   const preBeat=Math.max(actx.currentTime, startAt-barDur);
-  // Arm incoming at the bar boundary
   armDeckAt(to, startAt, bpm);
   D[to].vol.gain.cancelScheduledValues(startAt-0.01);
-  D[to].vol.gain.setValueAtTime(0.85,startAt);
-  // Outgoing: HPF sweep starts 1 bar early, vol → 0 at cut point
+  D[to].vol.gain.setValueAtTime(ng_to,startAt);
+  // Outgoing: HPF sweep 1 bar early, vol → 0 at cut point
   D[from].hpf.frequency.cancelScheduledValues(preBeat);
   D[from].hpf.frequency.setValueAtTime(20,preBeat);
   D[from].hpf.frequency.exponentialRampToValueAtTime(900,startAt-0.03);
   D[from].vol.gain.cancelScheduledValues(preBeat);
-  D[from].vol.gain.setValueAtTime(0.85,preBeat);
+  D[from].vol.gain.setValueAtTime(ng_from,preBeat);
   D[from].vol.gain.linearRampToValueAtTime(0,startAt);
   // CF snaps at cut point
   const ep=from==='a'?1:0;
@@ -851,26 +890,32 @@ function doHardCut(from,to,bpm,startAt,done){
 // bar: bass snaps from outgoing to incoming in one beat. Groovy and precise.
 function doBassSwitch(from,to,bars,bpm,startAt,done){
   const barDur=4*(60/bpm), endAt=startAt+bars*barDur;
+  const ng_to=D[to].normGain||0.85, ng_from=D[from].normGain||0.85;
   const bassSwap=startAt+(bars*0.5)*barDur;
   const cfMoveAt=startAt+4*barDur;
-  const hpfAt=startAt+(bars*0.72)*barDur;
+  const hpfAt=startAt+(bars*0.80)*barDur;
 
+  // INCOMING: HPF holds sub-bass out until the exact swap bar — precision kick isolation
   D[to].vol.gain.cancelScheduledValues(startAt-0.01);
   D[to].vol.gain.setValueAtTime(0,startAt);
-  D[to].vol.gain.linearRampToValueAtTime(0.85,startAt+6*barDur);
-  // Bass stays cut until the exact swap bar — then snaps in (one bar ramp)
+  D[to].vol.gain.linearRampToValueAtTime(ng_to,startAt+6*barDur);
   D[to].eL.gain.cancelScheduledValues(startAt-0.01);
   D[to].eL.gain.setValueAtTime(-12,startAt);
   D[to].eL.gain.setValueAtTime(-12,bassSwap-0.02);
   D[to].eL.gain.linearRampToValueAtTime(0,bassSwap+barDur);
+  // Physical HPF mirrors EQ cut for maximum isolation before the swap
+  D[to].hpf.frequency.cancelScheduledValues(startAt-0.01);
+  D[to].hpf.frequency.setValueAtTime(200,startAt);
+  D[to].hpf.frequency.setValueAtTime(200,bassSwap-0.02);
+  D[to].hpf.frequency.exponentialRampToValueAtTime(20,bassSwap+barDur);
   D[to].cfG.gain.cancelScheduledValues(startAt-0.01);
   D[to].cfG.gain.setValueAtTime(0,startAt);
   D[to].cfG.gain.setValueAtTime(0,cfMoveAt);
   D[to].cfG.gain.linearRampToValueAtTime(1,endAt);
 
+  // OUTGOING: bass snaps out at exactly the same swap point
   D[from].vol.gain.cancelScheduledValues(startAt-0.01);
-  D[from].vol.gain.setValueAtTime(0.85,startAt);
-  // Outgoing bass cuts on the same bar
+  D[from].vol.gain.setValueAtTime(ng_from,startAt);
   D[from].eL.gain.cancelScheduledValues(startAt-0.01);
   D[from].eL.gain.setValueAtTime(0,bassSwap-0.02);
   D[from].eL.gain.linearRampToValueAtTime(-12,bassSwap+barDur);
@@ -878,9 +923,10 @@ function doBassSwitch(from,to,bars,bpm,startAt,done){
   D[from].cfG.gain.setValueAtTime(1,startAt);
   D[from].cfG.gain.setValueAtTime(1,cfMoveAt);
   D[from].cfG.gain.linearRampToValueAtTime(0,endAt);
+  // Soft HPF: start at 80%, cap at 300Hz
   D[from].hpf.frequency.cancelScheduledValues(startAt-0.01);
   D[from].hpf.frequency.setValueAtTime(20,hpfAt);
-  D[from].hpf.frequency.exponentialRampToValueAtTime(600,endAt);
+  D[from].hpf.frequency.exponentialRampToValueAtTime(300,endAt);
 
   animCFPhased(from,to,cfMoveAt,endAt,done);
 }
@@ -1019,7 +1065,8 @@ const DJ={
   },
 
   _arm(id,t){
-    D[id].buffer=t.buffer;D[id].bpm=t.bpm;D[id].key=t.key;D[id].camelot=t.camelot;D[id].duration=t.buffer.duration;D[id].rate=1;
+    D[id].buffer=t.buffer;D[id].bpm=t.bpm;D[id].key=t.key;D[id].camelot=t.camelot;D[id].duration=t.buffer.duration;D[id].rate=1;D[id].baseRate=1;
+    D[id].normGain=t.normGain||0.85;D[id].vol.gain.value=D[id].normGain;
     document.getElementById('nm-name-'+id).textContent=t.name;
     document.getElementById('name-'+id)&&(document.getElementById('name-'+id).textContent=t.name);
     drawWf(id,t.buffer);setBadges(id);
@@ -1053,8 +1100,15 @@ const DJ={
       log(`Next: ${queue[nextIdx].name} (${queue[nextIdx].bpm} BPM · ${queue[nextIdx].camelot})`,'i');
     }
 
+    // Phrasing alignment: only fire within 1 bar of an 8-bar phrase boundary,
+    // unless we're urgent (remaining < transDur×0.5) — prevents mid-phrase drops.
+    const phraseDur=8*barDur;
+    const posInPhrase=pos%phraseDur;
+    const nearPhraseBoundary=posInPhrase<barDur||posInPhrase>(phraseDur-barDur);
+    const urgentFire=remaining<transDur*0.5;
+
     // Fire transition (only after minimum play time, only once per track)
-    if(remaining<transDur&&remaining>0&&pos>minPlayed&&!DJ.transFired&&!transRunning&&nextIdx<queue.length){
+    if(remaining<transDur&&remaining>0&&pos>minPlayed&&!DJ.transFired&&!transRunning&&nextIdx<queue.length&&(nearPhraseBoundary||urgentFire)){
       DJ.transFired=true;
       const from=DJ.curDeck,to=from==='a'?'b':'a';
       playedIds.add(queue[DJ.curIdx].id);
@@ -1131,7 +1185,9 @@ async function addToLib(files){
         t.buffer=await actx.decodeAudioData(ab);
         t.duration=t.buffer.duration;t.bpm=detectBPM(t.buffer);
         const kr=detectKey(t.buffer);t.key=kr.name;t.camelot=kr.camelot;
-        t.energy=estimateEnergy(t.buffer);t.state='ready';
+        t.energy=estimateEnergy(t.buffer);
+        t.normGain=calcNormGain(t.buffer); // loudness normalisation
+        t.state='ready';
       }catch(e){t.state='error';}
       renderLib();updateLibStat();
     }));
@@ -1274,6 +1330,7 @@ async function loadTrack(id,input){
   stopSrc(id);const d=D[id];
   d.buffer=buf;d.duration=buf.duration;d.startOffset=0;d.rate=1;
   d.bpm=detectBPM(buf);const kr=detectKey(buf);d.key=kr.name;d.camelot=kr.camelot;
+  d.normGain=calcNormGain(buf);d.vol.gain.value=d.normGain;
   setBadges(id);drawWf(id,buf);
   document.getElementById('time-'+id).textContent=`0:00 / ${fmt(buf.duration)}`;
   updateTransUI(id);updateCompat();
@@ -1282,7 +1339,12 @@ async function loadTrack(id,input){
 function togglePlay(id){ensureCtx();const d=D[id];if(!d?.buffer)return;if(d.playing)stopSrc(id);else playDeck(id,d.startOffset);updateTransUI(id);}
 function cueDeck(id){const d=D[id];if(!d)return;stopSrc(id);d.startOffset=0;updateTransUI(id);}
 function seekDeck(id,e){const d=D[id];if(!d?.buffer)return;const r=e.currentTarget.getBoundingClientRect(),off=(e.clientX-r.left)/r.width*d.duration;d.startOffset=off;if(d.playing)playDeck(id,off);}
-function nudge(id,delta){const d=D[id];if(!d?.buffer)return;d.rate=Math.max(0.5,Math.min(2,d.rate+delta));if(d.source)d.source.playbackRate.value=d.rate;}
+function nudge(id,delta){
+  const d=D[id];if(!d?.buffer)return;
+  const base=d.baseRate||1.0;
+  d.rate=Math.max(base*0.92,Math.min(base*1.08,d.rate+delta));
+  if(d.source)d.source.playbackRate.value=d.rate;
+}
 function setCrossfader(val){if(!actx)return;const p=val/100;D['a'].cfG.gain.value=Math.cos(p*Math.PI/2);D['b'].cfG.gain.value=Math.cos((1-p)*Math.PI/2);}
 function setVolume(id,v){if(D[id])D[id].vol.gain.value=v/100;}
 function syncBPM(src,tgt){const ds=D[src],dt=D[tgt];if(!ds?.bpm||!dt?.bpm)return;dt.rate=ds.bpm/dt.bpm;if(dt.source)dt.source.playbackRate.value=dt.rate;dt.bpm=Math.round(ds.bpm*10)/10;setBadges(tgt);}
