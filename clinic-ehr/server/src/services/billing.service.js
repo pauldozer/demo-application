@@ -145,8 +145,9 @@ class BillingService {
     };
   }
 
-  async getAnalytics({ from, to }) {
-    const params = [from, to];
+  async getAnalytics({ from, to, doctorId = null }) {
+    const docFilter = doctorId ? 'AND a.doctor_id = $3' : '';
+    const params    = doctorId ? [from, to, doctorId] : [from, to];
 
     const { rows: daily } = await pool.query(`
       SELECT
@@ -161,6 +162,7 @@ class BillingService {
       JOIN appointments a ON b.appointment_id = a.id
       WHERE b.payment_status = 'paid'
         AND a.scheduled_at::date BETWEEN $1::date AND $2::date
+        ${docFilter}
       GROUP BY DATE(a.scheduled_at)
       ORDER BY DATE(a.scheduled_at)
     `, params);
@@ -177,6 +179,7 @@ class BillingService {
       JOIN users u ON a.doctor_id = u.id
       WHERE b.payment_status = 'paid'
         AND a.scheduled_at::date BETWEEN $1::date AND $2::date
+        ${docFilter}
       GROUP BY a.doctor_id, u.name, u.commission_pct
       ORDER BY revenue DESC
     `, params);
@@ -191,39 +194,61 @@ class BillingService {
         COUNT(*)::int AS total_count
       FROM appointment_billing b
       JOIN appointments a ON b.appointment_id = a.id
+      ${doctorId ? 'JOIN users u ON a.doctor_id = u.id' : ''}
       WHERE b.payment_status = 'paid'
         AND a.scheduled_at::date BETWEEN $1::date AND $2::date
+        ${docFilter}
     `, params);
 
+    // When filtered to a single doctor, include their commission/earnings split
+    let doctorSplit = null;
+    if (doctorId && byDoctor.length > 0) {
+      const dr  = byDoctor[0];
+      const rev = parseFloat(dr.revenue);
+      const pct = parseFloat(dr.commission_pct || 0);
+      doctorSplit = {
+        commission_pct: pct,
+        clinic_share:   +(rev * pct / 100).toFixed(2),
+        doctor_earnings: +(rev * (1 - pct / 100)).toFixed(2),
+      };
+    }
+
     return {
-      daily: daily.map(r => ({
-        date:       r.date,
-        revenue:    parseFloat(r.revenue),
-        am_revenue: parseFloat(r.am_revenue),
-        pm_revenue: parseFloat(r.pm_revenue),
-        count:      r.count,
-        am_count:   r.am_count,
-        pm_count:   r.pm_count,
-      })),
+      daily: daily.map(r => {
+        const rev = parseFloat(r.revenue);
+        const pct = doctorId && byDoctor[0] ? parseFloat(byDoctor[0].commission_pct || 0) : 0;
+        return {
+          date:            r.date,
+          revenue:         rev,
+          am_revenue:      parseFloat(r.am_revenue),
+          pm_revenue:      parseFloat(r.pm_revenue),
+          count:           r.count,
+          am_count:        r.am_count,
+          pm_count:        r.pm_count,
+          doctor_earnings: doctorId ? +(rev * (1 - pct / 100)).toFixed(2) : undefined,
+          clinic_share:    doctorId ? +(rev * pct / 100).toFixed(2) : undefined,
+        };
+      }),
       by_doctor: byDoctor.map(r => {
         const rev  = parseFloat(r.revenue);
         const pct  = parseFloat(r.commission_pct || 0);
         return {
-          doctor_id:     r.doctor_id,
-          doctor_name:   r.doctor_name,
+          doctor_id:      r.doctor_id,
+          doctor_name:    r.doctor_name,
           commission_pct: pct,
-          revenue:       rev,
-          count:         r.count,
-          clinic_share:  +(rev * pct / 100).toFixed(2),
-          doctor_share:  +(rev * (1 - pct / 100)).toFixed(2),
+          revenue:        rev,
+          count:          r.count,
+          clinic_share:   +(rev * pct / 100).toFixed(2),
+          doctor_share:   +(rev * (1 - pct / 100)).toFixed(2),
         };
       }),
-      am_revenue:    parseFloat(totals.am_revenue),
-      pm_revenue:    parseFloat(totals.pm_revenue),
-      am_count:      totals.am_count,
-      pm_count:      totals.pm_count,
-      total_revenue: parseFloat(totals.total_revenue),
-      total_count:   totals.total_count,
+      am_revenue:      parseFloat(totals.am_revenue),
+      pm_revenue:      parseFloat(totals.pm_revenue),
+      am_count:        totals.am_count,
+      pm_count:        totals.pm_count,
+      total_revenue:   parseFloat(totals.total_revenue),
+      total_count:     totals.total_count,
+      doctor_split:    doctorSplit,
     };
   }
 }

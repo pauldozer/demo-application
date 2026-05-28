@@ -8,7 +8,7 @@ import {
   TeamOutlined, CalendarOutlined, ClockCircleOutlined,
   UserAddOutlined, ArrowRightOutlined, DollarOutlined,
   ExclamationCircleOutlined, RiseOutlined, SunOutlined,
-  MoonOutlined, WalletOutlined
+  MoonOutlined, WalletOutlined, PercentageOutlined
 } from '@ant-design/icons';
 import dayjs from 'dayjs';
 import {
@@ -81,6 +81,7 @@ export default function DashboardPage() {
   const isAdmin     = user?.role === 'admin';
   const isAssistant = user?.role === 'assistant';
   const isDoctor    = user?.role === 'doctor';
+  const showAnalytics = isAdmin || isDoctor;
 
   useEffect(() => {
     statsApi.overview()
@@ -90,7 +91,7 @@ export default function DashboardPage() {
   }, []);
 
   const loadAnalytics = useCallback(async () => {
-    if (!isAdmin || !dateRange?.[0] || !dateRange?.[1]) return;
+    if (!showAnalytics || !dateRange?.[0] || !dateRange?.[1]) return;
     setLA(true);
     try {
       const data = await billingApi.analytics({
@@ -103,7 +104,7 @@ export default function DashboardPage() {
     } finally {
       setLA(false);
     }
-  }, [isAdmin, dateRange]);
+  }, [showAnalytics, dateRange]);
 
   useEffect(() => { loadAnalytics(); }, [loadAnalytics]);
 
@@ -117,10 +118,10 @@ export default function DashboardPage() {
   };
 
   const statCards = [
-    { title: 'Total Patients',       value: stats?.total_patients,     icon: <TeamOutlined />,        color: '#1677ff', onClick: () => navigate('/patients') },
-    { title: "Today's Appointments", value: stats?.today_appointments, icon: <CalendarOutlined />,    color: '#52c41a', onClick: () => navigate('/calendar') },
-    { title: 'Waiting / In Progress',value: stats?.waiting,           icon: <ClockCircleOutlined />, color: '#fa8c16', onClick: () => navigate('/queue') },
-    { title: 'New Patients Today',   value: stats?.new_today,         icon: <UserAddOutlined />,     color: '#722ed1', onClick: () => navigate('/patients') },
+    { title: 'Total Patients',        value: stats?.total_patients,     icon: <TeamOutlined />,        color: '#1677ff', onClick: () => navigate('/patients') },
+    { title: "Today's Appointments",  value: stats?.today_appointments, icon: <CalendarOutlined />,    color: '#52c41a', onClick: () => navigate('/calendar') },
+    { title: 'Waiting / In Progress', value: stats?.waiting,            icon: <ClockCircleOutlined />, color: '#fa8c16', onClick: () => navigate('/queue') },
+    { title: 'New Patients Today',    value: stats?.new_today,          icon: <UserAddOutlined />,     color: '#722ed1', onClick: () => navigate('/patients') },
   ];
 
   const revCards = [
@@ -137,10 +138,10 @@ export default function DashboardPage() {
     { title: 'This Month', dataIndex: 'month',       key: 'month',  render: fmtUSD },
   ];
 
-  // Assistant: doctor payout table — what to pay each doctor today
+  // Assistant: doctor payout table
   const payoutColumns = [
-    { title: 'Doctor',    dataIndex: 'doctor_name',  key: 'name' },
-    { title: 'Revenue Today', dataIndex: 'today',    key: 'today',   render: fmtUSD },
+    { title: 'Doctor',           dataIndex: 'doctor_name',  key: 'name' },
+    { title: 'Revenue Today',    dataIndex: 'today',        key: 'today',   render: fmtUSD },
     {
       title: 'Clinic Commission',
       key: 'clinic',
@@ -161,9 +162,9 @@ export default function DashboardPage() {
 
   // Admin analytics: by-doctor table for selected period
   const analyticsDocColumns = [
-    { title: 'Doctor',          dataIndex: 'doctor_name',   key: 'name' },
-    { title: 'Consultations',   dataIndex: 'count',         key: 'count' },
-    { title: 'Revenue',         dataIndex: 'revenue',       key: 'revenue',  render: fmtUSD },
+    { title: 'Doctor',              dataIndex: 'doctor_name',  key: 'name' },
+    { title: 'Consultations',       dataIndex: 'count',        key: 'count' },
+    { title: 'Revenue',             dataIndex: 'revenue',      key: 'revenue',  render: fmtUSD },
     {
       title: 'Commission (Clinic)',
       dataIndex: 'clinic_share',
@@ -175,17 +176,67 @@ export default function DashboardPage() {
         </Space>
       )
     },
-    { title: 'Doctor Receives', dataIndex: 'doctor_share', key: 'doctor_share', render: fmtUSD },
+    { title: 'Doctor Receives', dataIndex: 'doctor_share', key: 'doctor_share', render: (v) => <Text strong style={{ color: '#1677ff' }}>{fmtUSD(v)}</Text> },
   ];
 
   const chartData = (analytics?.daily || []).map(d => ({
-    date:  fmtShortDate(d.date),
-    Total: d.revenue,
-    AM:    d.am_revenue,
-    PM:    d.pm_revenue,
+    date:            fmtShortDate(d.date),
+    Revenue:         d.revenue,
+    'My Earnings':   d.doctor_earnings,
+    'Clinic Cut':    d.clinic_share,
+    AM:              d.am_revenue,
+    PM:              d.pm_revenue,
   }));
 
   const hasDoctors = (revenue?.by_doctor?.length || 0) > 0;
+  const split      = analytics?.doctor_split;
+
+  // Summary stat cards for analytics section
+  const analyticsSummaryCards = isDoctor ? [
+    {
+      label: 'Total Revenue',
+      value: analytics?.total_revenue,
+      sub: `${analytics?.total_count || 0} paid consultations`,
+      color: '#1677ff',
+      icon: <DollarOutlined />,
+    },
+    {
+      label: 'Clinic Commission',
+      value: split?.clinic_share,
+      sub: split ? `${split.commission_pct}% deducted` : '—',
+      color: '#fa8c16',
+      icon: <PercentageOutlined />,
+    },
+    {
+      label: 'My Earnings',
+      value: split?.doctor_earnings,
+      sub: 'After commission',
+      color: '#52c41a',
+      icon: <WalletOutlined />,
+    },
+  ] : [
+    {
+      label: 'Total Collected',
+      value: analytics?.total_revenue,
+      sub: `${analytics?.total_count || 0} paid consultations`,
+      color: '#52c41a',
+      icon: <DollarOutlined />,
+    },
+    {
+      label: 'AM Sessions',
+      value: analytics?.am_revenue,
+      sub: `${analytics?.am_count || 0} consultations`,
+      color: '#fa8c16',
+      icon: <SunOutlined />,
+    },
+    {
+      label: 'PM Sessions',
+      value: analytics?.pm_revenue,
+      sub: `${analytics?.pm_count || 0} consultations`,
+      color: '#722ed1',
+      icon: <MoonOutlined />,
+    },
+  ];
 
   return (
     <div>
@@ -218,7 +269,7 @@ export default function DashboardPage() {
         ))}
       </Row>
 
-      {/* ── Revenue section ── */}
+      {/* ── Revenue summary cards (today / week / month) ── */}
       <div style={{ marginTop: 24 }}>
         <Title level={5} style={{ marginBottom: 12 }}>
           <DollarOutlined style={{ color: '#52c41a', marginRight: 8 }} />
@@ -234,7 +285,6 @@ export default function DashboardPage() {
                     title={title}
                     value={fmtUSD(value)}
                     valueStyle={{ color, fontWeight: 700, fontSize: 22 }}
-                    prefix={<DollarOutlined style={{ display: 'none' }} />}
                   />
                 )}
               </Card>
@@ -255,7 +305,7 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* Admin/assistant: clinic revenue by doctor */}
+        {/* Admin/assistant: clinic revenue by doctor (quick summary) */}
         {!isDoctor && !loadingRev && hasDoctors && (
           <Card size="small" title="Revenue by Doctor" style={{ marginTop: 16, borderRadius: 8 }}>
             <Table
@@ -276,16 +326,11 @@ export default function DashboardPage() {
           </Card>
         )}
 
-        {/* ── Doctor Payouts Today — assistant only ── */}
+        {/* Assistant: doctor payout table */}
         {isAssistant && !loadingRev && hasDoctors && (
           <Card
             size="small"
-            title={
-              <Space>
-                <WalletOutlined style={{ color: '#1677ff' }} />
-                Doctor Payouts Today
-              </Space>
-            }
+            title={<Space><WalletOutlined style={{ color: '#1677ff' }} />Doctor Payouts Today</Space>}
             style={{ marginTop: 16, borderRadius: 8 }}
           >
             <Table
@@ -314,14 +359,16 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {/* ── Financial Analytics — admin only ── */}
-      {isAdmin && (
+      {/* ── Financial Analytics — admin + doctor ── */}
+      {showAnalytics && (
         <div style={{ marginTop: 32 }}>
           <Divider />
+
+          {/* Header row: title + period controls */}
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 12, marginBottom: 16 }}>
             <Title level={5} style={{ margin: 0 }}>
               <RiseOutlined style={{ color: '#1677ff', marginRight: 8 }} />
-              Financial Analytics
+              {isDoctor ? 'My Earnings Breakdown' : 'Financial Analytics'}
             </Title>
 
             <Space wrap>
@@ -345,72 +392,97 @@ export default function DashboardPage() {
             <div style={{ textAlign: 'center', padding: 40 }}><Spin /></div>
           ) : (
             <>
-              {/* Summary stats for selected period */}
+              {/* Summary cards (doctor: revenue/commission/earnings | admin: total/AM/PM) */}
               <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-                <Col xs={24} sm={8}>
-                  <Card size="small" style={{ borderRadius: 8, textAlign: 'center' }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>Total Collected</Text>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: '#52c41a' }}>
-                      {fmtUSD(analytics?.total_revenue)}
-                    </div>
-                    <Text type="secondary" style={{ fontSize: 11 }}>{analytics?.total_count || 0} paid consultations</Text>
-                  </Card>
-                </Col>
-                <Col xs={24} sm={8}>
-                  <Card size="small" style={{ borderRadius: 8, textAlign: 'center', borderColor: '#ffe58f' }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      <SunOutlined style={{ color: '#fa8c16', marginRight: 4 }} />AM Sessions
-                    </Text>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: '#fa8c16' }}>
-                      {fmtUSD(analytics?.am_revenue)}
-                    </div>
-                    <Text type="secondary" style={{ fontSize: 11 }}>{analytics?.am_count || 0} consultations</Text>
-                  </Card>
-                </Col>
-                <Col xs={24} sm={8}>
-                  <Card size="small" style={{ borderRadius: 8, textAlign: 'center', borderColor: '#d3adf7' }}>
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      <MoonOutlined style={{ color: '#722ed1', marginRight: 4 }} />PM Sessions
-                    </Text>
-                    <div style={{ fontSize: 24, fontWeight: 700, color: '#722ed1' }}>
-                      {fmtUSD(analytics?.pm_revenue)}
-                    </div>
-                    <Text type="secondary" style={{ fontSize: 11 }}>{analytics?.pm_count || 0} consultations</Text>
-                  </Card>
-                </Col>
+                {analyticsSummaryCards.map(({ label, value, sub, color, icon }) => (
+                  <Col key={label} xs={24} sm={8}>
+                    <Card size="small" style={{ borderRadius: 8, textAlign: 'center' }}>
+                      <div style={{ fontSize: 12, color: '#8c8c8c', marginBottom: 4 }}>
+                        {React.cloneElement(icon, { style: { color, marginRight: 4 } })}
+                        {label}
+                      </div>
+                      <div style={{ fontSize: 24, fontWeight: 700, color }}>{fmtUSD(value)}</div>
+                      <Text type="secondary" style={{ fontSize: 11 }}>{sub}</Text>
+                    </Card>
+                  </Col>
+                ))}
               </Row>
 
-              {/* Revenue trend + AM/PM charts */}
+              {/* Charts */}
               {chartData.length > 0 ? (
                 <>
-                  <Card size="small" title="Daily Revenue Trend" style={{ borderRadius: 8, marginBottom: 16 }}>
-                    <ResponsiveContainer width="100%" height={240}>
-                      <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-                        <RechartTooltip content={<ChartTooltip />} />
-                        <Legend wrapperStyle={{ fontSize: 12 }} />
-                        <Line type="monotone" dataKey="Total" stroke="#1677ff" strokeWidth={2} dot={false} />
-                        <Line type="monotone" dataKey="AM"    stroke="#fa8c16" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                        <Line type="monotone" dataKey="PM"    stroke="#722ed1" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                      </LineChart>
-                    </ResponsiveContainer>
-                  </Card>
+                  {/* Doctor: Revenue vs My Earnings trend */}
+                  {isDoctor && (
+                    <Card size="small" title="Revenue vs My Earnings" style={{ borderRadius: 8, marginBottom: 16 }}>
+                      <ResponsiveContainer width="100%" height={240}>
+                        <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                          <RechartTooltip content={<ChartTooltip />} />
+                          <Legend wrapperStyle={{ fontSize: 12 }} />
+                          <Line type="monotone" dataKey="Revenue"     stroke="#1677ff" strokeWidth={2} dot={false} />
+                          <Line type="monotone" dataKey="My Earnings" stroke="#52c41a" strokeWidth={2} dot={false} />
+                          <Line type="monotone" dataKey="Clinic Cut"  stroke="#ff4d4f" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  )}
 
-                  <Card size="small" title="AM vs PM Revenue by Day" style={{ borderRadius: 8, marginBottom: 16 }}>
-                    <ResponsiveContainer width="100%" height={200}>
-                      <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                        <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                        <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                        <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
-                        <RechartTooltip content={<ChartTooltip />} />
-                        <Legend wrapperStyle={{ fontSize: 12 }} />
-                        <Bar dataKey="AM" fill="#fa8c16" radius={[3,3,0,0]} />
-                        <Bar dataKey="PM" fill="#722ed1" radius={[3,3,0,0]} />
-                      </BarChart>
-                    </ResponsiveContainer>
-                  </Card>
+                  {/* Doctor: Revenue vs Earnings bar */}
+                  {isDoctor && (
+                    <Card size="small" title="Daily Earnings Breakdown" style={{ borderRadius: 8, marginBottom: 16 }}>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                          <RechartTooltip content={<ChartTooltip />} />
+                          <Legend wrapperStyle={{ fontSize: 12 }} />
+                          <Bar dataKey="My Earnings" fill="#52c41a" radius={[3,3,0,0]} stackId="a" />
+                          <Bar dataKey="Clinic Cut"  fill="#ff4d4f" radius={[3,3,0,0]} stackId="a" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                      <Text type="secondary" style={{ fontSize: 11 }}>
+                        Stacked bars show your earnings (green) + clinic commission (red) = total revenue per day
+                      </Text>
+                    </Card>
+                  )}
+
+                  {/* Admin: Revenue trend */}
+                  {isAdmin && (
+                    <Card size="small" title="Daily Revenue Trend" style={{ borderRadius: 8, marginBottom: 16 }}>
+                      <ResponsiveContainer width="100%" height={240}>
+                        <LineChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                          <RechartTooltip content={<ChartTooltip />} />
+                          <Legend wrapperStyle={{ fontSize: 12 }} />
+                          <Line type="monotone" dataKey="Revenue" stroke="#1677ff" strokeWidth={2} dot={false} />
+                          <Line type="monotone" dataKey="AM"      stroke="#fa8c16" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                          <Line type="monotone" dataKey="PM"      stroke="#722ed1" strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  )}
+
+                  {/* Admin: AM vs PM bar */}
+                  {isAdmin && (
+                    <Card size="small" title="AM vs PM Revenue by Day" style={{ borderRadius: 8, marginBottom: 16 }}>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <BarChart data={chartData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+                          <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                          <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${v}`} />
+                          <RechartTooltip content={<ChartTooltip />} />
+                          <Legend wrapperStyle={{ fontSize: 12 }} />
+                          <Bar dataKey="AM" fill="#fa8c16" radius={[3,3,0,0]} />
+                          <Bar dataKey="PM" fill="#722ed1" radius={[3,3,0,0]} />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </Card>
+                  )}
                 </>
               ) : (
                 <Card size="small" style={{ borderRadius: 8, marginBottom: 16, textAlign: 'center', padding: 24 }}>
@@ -418,8 +490,8 @@ export default function DashboardPage() {
                 </Card>
               )}
 
-              {/* By-doctor breakdown for selected period */}
-              {(analytics?.by_doctor?.length || 0) > 0 && (
+              {/* Admin: by-doctor breakdown for selected period */}
+              {isAdmin && (analytics?.by_doctor?.length || 0) > 0 && (
                 <Card size="small" title="Revenue by Doctor" style={{ borderRadius: 8 }}>
                   <Table
                     dataSource={analytics.by_doctor}
@@ -438,13 +510,49 @@ export default function DashboardPage() {
                           <Table.Summary.Cell index={1}><Text strong>{totCount}</Text></Table.Summary.Cell>
                           <Table.Summary.Cell index={2}><Text strong>{fmtUSD(totRevenue)}</Text></Table.Summary.Cell>
                           <Table.Summary.Cell index={3}><Text strong>{fmtUSD(totClinic)}</Text></Table.Summary.Cell>
-                          <Table.Summary.Cell index={4}><Text strong>{fmtUSD(totDoctor)}</Text></Table.Summary.Cell>
+                          <Table.Summary.Cell index={4}><Text strong style={{ color: '#1677ff' }}>{fmtUSD(totDoctor)}</Text></Table.Summary.Cell>
                         </Table.Summary.Row>
                       );
                     }}
                   />
                 </Card>
               )}
+
+              {/* Doctor: own stats table for selected period */}
+              {isDoctor && (analytics?.by_doctor?.length || 0) > 0 && (() => {
+                const dr = analytics.by_doctor[0];
+                return (
+                  <Card size="small" title="My Period Summary" style={{ borderRadius: 8 }}>
+                    <Table
+                      dataSource={[dr]}
+                      rowKey="doctor_id"
+                      size="small"
+                      pagination={false}
+                      columns={[
+                        { title: 'Consultations',    dataIndex: 'count',        key: 'count' },
+                        { title: 'Total Revenue',    dataIndex: 'revenue',      key: 'revenue',       render: fmtUSD },
+                        {
+                          title: 'Clinic Commission',
+                          dataIndex: 'clinic_share',
+                          key: 'clinic_share',
+                          render: (v) => (
+                            <Space size={4}>
+                              <Text style={{ color: '#ff4d4f' }}>{fmtUSD(v)}</Text>
+                              <Tag color="purple" style={{ fontSize: 11 }}>{dr.commission_pct}%</Tag>
+                            </Space>
+                          )
+                        },
+                        {
+                          title: 'My Earnings',
+                          dataIndex: 'doctor_share',
+                          key: 'doctor_share',
+                          render: (v) => <Text strong style={{ color: '#52c41a', fontSize: 15 }}>{fmtUSD(v)}</Text>
+                        },
+                      ]}
+                    />
+                  </Card>
+                );
+              })()}
             </>
           )}
         </div>

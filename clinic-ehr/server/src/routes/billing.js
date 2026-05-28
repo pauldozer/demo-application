@@ -7,12 +7,14 @@ const BillingService   = require('../services/billing.service');
 const router = express.Router();
 router.use(verifyToken);
 
-// GET /api/billing/analytics?from=&to=  (admin only — must be before /:appointmentId)
-router.get('/analytics', requireRole('admin'), async (req, res) => {
+// GET /api/billing/analytics?from=&to=  (admin + doctor — must be before /:appointmentId)
+router.get('/analytics', requireRole('admin', 'doctor'), async (req, res) => {
   try {
     const { from, to } = req.query;
     if (!from || !to) return res.status(400).json({ error: 'from and to dates required' });
-    const data = await BillingService.getAnalytics({ from, to });
+    // Doctors can only see their own data
+    const doctorId = req.user.role === 'doctor' ? req.user.id : null;
+    const data = await BillingService.getAnalytics({ from, to, doctorId });
     res.json(data);
   } catch (err) {
     console.error(err);
