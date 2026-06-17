@@ -38,16 +38,59 @@ interface CalEvent {
   forecast: string
 }
 
+interface PriceAlert {
+  id: string
+  symbol: string
+  asset: string
+  name: string
+  price: number
+  changePct: number
+  window: '2min' | '10min'
+  timestamp: string
+}
+
 // ── Constants ──────────────────────────────────────────────────────────────
 const TABS = ['PULSE', 'FLASH', 'WATCHLIST', 'CALENDAR', 'ALL NEWS']
 const CATEGORY_FILTERS = ['ALL', 'FED/RATES', 'MACRO', 'EARNINGS', 'AI/TECH', 'COMMODITIES', 'GEOPOLITICAL', 'CORPORATE']
-const ASSET_FILTERS = ['ALL', 'OIL', 'GOLD', 'SILVER', 'GAS', 'COPPER', 'NVDA', 'AMD', 'PLTR', 'CEG', 'AVGO', 'MU', 'TSLA', 'BTC', 'FED', '10Y', 'USD', 'SPX']
+const ASSET_FILTERS = ['ALL', 'OIL', 'GOLD', 'SILVER', 'GAS', 'COPPER', 'VIX', 'NVDA', 'AMD', 'PLTR', 'CEG', 'AVGO', 'MU', 'TSLA', 'BTC', 'FED', '10Y', 'USD', 'SPX']
 
 const ASSET_COLORS: Record<string, string> = {
   OIL: '#f59e0b', GOLD: '#fbbf24', SILVER: '#94a3b8', GAS: '#06b6d4', COPPER: '#f97316',
-  NVDA: '#22c55e', AMD: '#ef4444', PLTR: '#8b5cf6', CEG: '#3b82f6', AVGO: '#0ea5e9',
-  ARM: '#f97316', VRT: '#10b981', APP: '#ec4899', MU: '#6366f1', TSLA: '#cc2222',
-  BTC: '#f97316', USD: '#22c55e', '10Y': '#3b82f6', FED: '#3b82f6', SPX: '#64748b',
+  VIX: '#a855f7', NVDA: '#22c55e', AMD: '#ef4444', PLTR: '#8b5cf6', CEG: '#3b82f6',
+  AVGO: '#0ea5e9', ARM: '#f97316', VRT: '#10b981', APP: '#ec4899', MU: '#6366f1',
+  TSLA: '#cc2222', BTC: '#f97316', USD: '#22c55e', '10Y': '#3b82f6', FED: '#3b82f6', SPX: '#64748b',
+}
+
+const SYMBOL_TO_ASSET: Record<string, string> = {
+  'SI=F':     'SILVER',
+  'GC=F':     'GOLD',
+  'CL=F':     'OIL',
+  '^VIX':     'VIX',
+  '^GSPC':    'SPX',
+  '^TNX':     '10Y',
+  'DX-Y.NYB': 'USD',
+  'NVDA': 'NVDA', 'MU': 'MU', 'PLTR': 'PLTR', 'CEG': 'CEG',
+  'AMD': 'AMD', 'AVGO': 'AVGO', 'APP': 'APP', 'ARM': 'ARM', 'VRT': 'VRT',
+}
+
+const MOVE_THRESHOLDS: Record<string, { short: number; long: number }> = {
+  SILVER: { short: 0.4,  long: 1.0  },
+  GOLD:   { short: 0.3,  long: 0.8  },
+  OIL:    { short: 0.4,  long: 1.0  },
+  VIX:    { short: 3.0,  long: 7.0  },
+  SPX:    { short: 0.2,  long: 0.5  },
+  '10Y':  { short: 0.5,  long: 1.2  },
+  USD:    { short: 0.2,  long: 0.5  },
+  NVDA:   { short: 0.8,  long: 2.0  },
+  MU:     { short: 0.8,  long: 2.0  },
+  PLTR:   { short: 0.8,  long: 2.0  },
+  AMD:    { short: 0.8,  long: 2.0  },
+  AVGO:   { short: 0.6,  long: 1.5  },
+  CEG:    { short: 0.8,  long: 2.0  },
+  APP:    { short: 0.8,  long: 2.0  },
+  ARM:    { short: 0.8,  long: 2.0  },
+  VRT:    { short: 0.8,  long: 2.0  },
+  default: { short: 0.5, long: 1.5  },
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -234,6 +277,36 @@ function FlashCard({ item }: { item: NewsItem }) {
   )
 }
 
+function PriceAlertCard({ alert: a }: { alert: PriceAlert }) {
+  const color = ASSET_COLORS[a.asset] ?? '#64748b'
+  const up = a.changePct > 0
+  const moveColor = up ? '#22c55e' : '#ef4444'
+  return (
+    <div style={{
+      borderLeft: `3px solid ${moveColor}`,
+      background: `linear-gradient(90deg, ${moveColor}10 0%, transparent 60%)`,
+      borderRadius: '0 8px 8px 0', padding: '10px 14px', marginBottom: 6,
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 5 }}>
+        <span style={{
+          background: color + '22', color, border: `1px solid ${color}66`,
+          borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 900, letterSpacing: '0.08em',
+        }}>{a.asset}</span>
+        <span style={{ fontWeight: 800, fontSize: 15, color: moveColor }}>
+          {up ? '▲' : '▼'} {Math.abs(a.changePct).toFixed(2)}%
+        </span>
+        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>in {a.window}</span>
+        <span style={{ marginLeft: 'auto', fontSize: 9, background: '#f59e0b22', color: '#f59e0b', border: '1px solid #f59e0b44', borderRadius: 3, padding: '1px 5px', fontWeight: 700 }}>⚡ PRICE ALERT</span>
+        <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{timeAgo(a.timestamp)}</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <span className="mono" style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{fmt(a.price)}</span>
+        <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>{a.name} · {a.window} price move detected</span>
+      </div>
+    </div>
+  )
+}
+
 // ── Main Dashboard ─────────────────────────────────────────────────────────
 export default function Dashboard() {
   const [news, setNews]               = useState<NewsItem[]>([])
@@ -242,13 +315,15 @@ export default function Dashboard() {
   const [watchlist, setWatchlist]     = useState<PriceTick[]>([])
   const [prevWl, setPrevWl]           = useState<Record<string, number>>({})
   const [calEvents, setCalEvents]     = useState<CalEvent[]>([])
+  const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([])
   const [tab, setTab]                 = useState('PULSE')
   const [catFilter, setCatFilter]     = useState('ALL')
   const [assetFilter, setAssetFilter] = useState('ALL')
   const [now, setNow]                 = useState(new Date())
   const [newsAt, setNewsAt]           = useState<string | null>(null)
   const [pricesAt, setPricesAt]       = useState<string | null>(null)
-  const knownIds = useRef(new Set<string>())
+  const knownIds       = useRef(new Set<string>())
+  const priceHistoryRef = useRef<Record<string, { price: number; t: number }[]>>({})
 
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
@@ -279,6 +354,63 @@ export default function Dashboard() {
     try {
       const res = await fetch('/api/prices')
       const data = await res.json()
+      const nowMs = Date.now()
+
+      // Price movement detection
+      const allTicks: PriceTick[] = [...(data.market ?? []), ...(data.watchlist ?? [])]
+      const newAlerts: PriceAlert[] = []
+
+      for (const tick of allTicks) {
+        const asset = SYMBOL_TO_ASSET[tick.symbol]
+        if (!asset) continue
+
+        const hist = priceHistoryRef.current[tick.symbol] ?? []
+        hist.push({ price: tick.price, t: nowMs })
+        if (hist.length > 45) hist.splice(0, hist.length - 45) // keep 15 min
+        priceHistoryRef.current[tick.symbol] = hist
+
+        const thr = MOVE_THRESHOLDS[asset] ?? MOVE_THRESHOLDS['default']
+
+        // 2-min window (6 readings × 20s)
+        if (hist.length >= 6) {
+          const ref = hist[hist.length - 6]
+          const pct = ((tick.price - ref.price) / ref.price) * 100
+          if (Math.abs(pct) >= thr.short) {
+            newAlerts.push({
+              id: `${tick.symbol}-2m-${Math.floor(nowMs / 120000)}`,
+              symbol: tick.symbol, asset, name: tick.name,
+              price: tick.price, changePct: pct, window: '2min',
+              timestamp: new Date(nowMs).toISOString(),
+            })
+          }
+        }
+
+        // 10-min window (30 readings × 20s)
+        if (hist.length >= 30) {
+          const ref = hist[hist.length - 30]
+          const pct = ((tick.price - ref.price) / ref.price) * 100
+          if (Math.abs(pct) >= thr.long) {
+            newAlerts.push({
+              id: `${tick.symbol}-10m-${Math.floor(nowMs / 600000)}`,
+              symbol: tick.symbol, asset, name: tick.name,
+              price: tick.price, changePct: pct, window: '10min',
+              timestamp: new Date(nowMs).toISOString(),
+            })
+          }
+        }
+      }
+
+      if (newAlerts.length > 0 || true) {
+        setPriceAlerts(prev => {
+          const map = new Map([...prev, ...newAlerts].map(a => [a.id, a]))
+          const cutoff = nowMs - 20 * 60 * 1000 // expire after 20 min
+          return Array.from(map.values())
+            .filter(a => new Date(a.timestamp).getTime() > cutoff)
+            .sort((a, b) => Math.abs(b.changePct) - Math.abs(a.changePct))
+            .slice(0, 15)
+        })
+      }
+
       setPrevWl(prev => {
         const next = { ...prev }
         ;(data.watchlist ?? []).forEach((t: PriceTick) => { next[t.symbol] = t.price })
@@ -375,6 +507,34 @@ export default function Dashboard() {
             })}
           </div>
         </div>
+        {/* Price alert banner — visible on all tabs */}
+        {priceAlerts.length > 0 && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 6, padding: '4px 16px',
+            background: '#080e18', borderTop: '1px solid #1e293b', overflowX: 'auto', flexShrink: 0,
+          }}>
+            <span style={{ fontSize: 9, fontWeight: 900, color: '#f59e0b', letterSpacing: '0.12em', whiteSpace: 'nowrap', marginRight: 4 }}>⚡ MOVES</span>
+            {priceAlerts.map(a => {
+              const color = ASSET_COLORS[a.asset] ?? '#64748b'
+              const up = a.changePct > 0
+              const mc = up ? '#22c55e' : '#ef4444'
+              return (
+                <button key={a.id} onClick={() => { setTab('FLASH'); setAssetFilter(a.asset) }} style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 4, padding: '2px 8px',
+                  background: mc + '15', border: `1px solid ${mc}40`,
+                  borderRadius: 4, cursor: 'pointer', whiteSpace: 'nowrap',
+                  fontFamily: 'inherit',
+                }}>
+                  <span style={{ color, fontWeight: 800, fontSize: 10 }}>{a.asset}</span>
+                  <span style={{ color: mc, fontWeight: 700, fontSize: 10 }}>
+                    {up ? '▲' : '▼'}{Math.abs(a.changePct).toFixed(2)}%
+                  </span>
+                  <span style={{ color: 'var(--text-muted)', fontSize: 9 }}>{a.window}</span>
+                </button>
+              )
+            })}
+          </div>
+        )}
       </header>
 
       {/* ── BODY ── */}
@@ -539,14 +699,41 @@ export default function Dashboard() {
                   })}
                 </div>
 
-                {/* Flash feed */}
-                {flashItems.length === 0 ? (
+                {/* Live price alerts — always first */}
+                {(() => {
+                  const visibleAlerts = assetFilter === 'ALL'
+                    ? priceAlerts
+                    : priceAlerts.filter(a => a.asset === assetFilter)
+                  return visibleAlerts.length > 0 ? (
+                    <div style={{ marginBottom: 16 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <span style={{ fontSize: 9, fontWeight: 900, color: '#f59e0b', letterSpacing: '0.1em' }}>⚡ LIVE PRICE MOVES</span>
+                        <div style={{ flex: 1, height: 1, background: '#f59e0b33' }} />
+                        <span style={{ fontSize: 9, color: 'var(--text-dim)' }}>real-time · no news delay</span>
+                      </div>
+                      {visibleAlerts.map(a => <PriceAlertCard key={a.id} alert={a} />)}
+                    </div>
+                  ) : null
+                })()}
+
+                {/* Flash news feed */}
+                {flashItems.length === 0 && priceAlerts.filter(a => assetFilter === 'ALL' || a.asset === assetFilter).length === 0 ? (
                   <div style={{ textAlign: 'center', color: 'var(--text-dim)', marginTop: 60, fontSize: 13 }}>
                     No asset-tagged news in the last 6 hours
-                    {assetFilter !== 'ALL' && <div style={{ marginTop: 8, fontSize: 11 }}>No {assetFilter} news found — try broadening the filter</div>}
+                    {assetFilter !== 'ALL' && <div style={{ marginTop: 8, fontSize: 11 }}>No {assetFilter} items yet — price alerts will appear above when a move is detected</div>}
                   </div>
                 ) : (
-                  flashItems.map(item => <FlashCard key={item.id} item={item} />)
+                  flashItems.length > 0 && (
+                    <div>
+                      {flashItems.length > 0 && priceAlerts.filter(a => assetFilter === 'ALL' || a.asset === assetFilter).length > 0 && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.1em' }}>NEWS FEED</span>
+                          <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                        </div>
+                      )}
+                      {flashItems.map(item => <FlashCard key={item.id} item={item} />)}
+                    </div>
+                  )
                 )}
               </div>
             )}
