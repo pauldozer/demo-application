@@ -72,6 +72,31 @@ function categorize(title: string, summary: string, sourceName?: string) {
   return { name: 'GENERAL', color: '#475569', weight: 0 }
 }
 
+const QUESTION_STARTERS = [
+  'will ', 'can ', 'could ', 'should ', 'is ', 'are ', 'was ', 'were ',
+  'what ', 'why ', 'how ', 'when ', 'who ', 'which ', 'do ', 'does ', 'did ',
+  'have ', 'has ', 'had ',
+]
+
+const VAGUE_PHRASES = [
+  "here's why", "here's what", "here's how", "here's the",
+  'what you need to know', 'what to know about', 'everything you need',
+  'all you need to know', 'you need to know', 'need to know:',
+  'how to ', 'watch:', 'listen:', 'opinion:', 'analysis by', 'video:',
+  'explainer:', 'podcast:', 'roundup:', 'morning briefing', 'afternoon briefing',
+  'market wrap', 'weekly recap', 'this is why', 'this is what',
+  'what it means for', 'what this means',
+]
+
+function isStatement(title: string): boolean {
+  if (!title || title.trim().length < 22) return false
+  if (title.trim().endsWith('?')) return false
+  const t = title.toLowerCase()
+  if (QUESTION_STARTERS.some(s => t.startsWith(s))) return false
+  if (VAGUE_PHRASES.some(p => t.includes(p))) return false
+  return true
+}
+
 function sentiment(title: string) {
   const t = title.toLowerCase()
   if (BULL_KW.some(k => t.includes(k))) return 'bullish'
@@ -101,7 +126,7 @@ async function fetchSource(src: typeof SOURCES[0]) {
     return (feed.items || [])
       .filter(item => {
         const pub = new Date(item.pubDate || item.isoDate || '').getTime()
-        return pub > cutoff
+        return pub > cutoff && isStatement(item.title || '')
       })
       .map(item => {
         const title = item.title || ''
