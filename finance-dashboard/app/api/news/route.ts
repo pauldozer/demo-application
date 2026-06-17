@@ -32,6 +32,37 @@ const CATEGORIES = [
 const BULL_KW = ['beat', 'surge', 'rally', 'rises', 'soar', 'record high', 'exceed', 'strong', 'gain', 'jumps', 'tops', 'upgrade', 'outperform', 'positive']
 const BEAR_KW = ['miss', 'falls', 'drops', 'plunge', 'weak', 'cut ', 'decline', 'warning', 'crash', 'below', 'downgrade', 'loss', 'disappoint', 'concern', 'fear', 'slump']
 
+const ASSET_MAP = [
+  { tag: 'OIL',    color: '#f59e0b', kw: ['crude oil', 'brent crude', 'wti crude', 'oil prices', 'oil price', 'opec', 'petroleum', 'oil output', 'oil supply', 'oil production', 'oil demand', 'strait of hormuz', 'hormuz', 'oil refinery', 'oil field', 'oil market', 'oil barrel', 'energy prices'] },
+  { tag: 'GOLD',   color: '#fbbf24', kw: ['gold price', 'gold prices', 'spot gold', 'gold futures', 'gold rally', 'gold surge', 'gold fell', 'gold market', 'gold drops', 'bullion', 'gold mining'] },
+  { tag: 'SILVER', color: '#94a3b8', kw: ['silver price', 'silver prices', 'spot silver', 'silver futures', 'silver rally', 'silver market', 'silver drops'] },
+  { tag: 'GAS',    color: '#06b6d4', kw: ['natural gas', 'henry hub', 'ng futures', 'gas inventory', 'gas storage', 'natural gas price'] },
+  { tag: 'COPPER', color: '#f97316', kw: ['copper price', 'copper prices', 'copper market', 'copper futures', 'copper demand'] },
+  { tag: 'NVDA',   color: '#22c55e', kw: ['nvidia', 'nvda', 'blackwell', 'h100', 'h200', 'gb200', 'jensen huang'] },
+  { tag: 'AMD',    color: '#ef4444', kw: ['advanced micro devices', 'amd gpu', 'amd chip', 'amd stock', 'amd revenue', 'mi300', 'radeon rx', 'instinct gpu'] },
+  { tag: 'PLTR',   color: '#8b5cf6', kw: ['palantir'] },
+  { tag: 'CEG',    color: '#3b82f6', kw: ['constellation energy', 'calvert cliffs'] },
+  { tag: 'AVGO',   color: '#0ea5e9', kw: ['broadcom'] },
+  { tag: 'ARM',    color: '#f97316', kw: ['arm holdings', 'arm chip', 'arm architecture', 'arm-based'] },
+  { tag: 'VRT',    color: '#10b981', kw: ['vertiv'] },
+  { tag: 'APP',    color: '#ec4899', kw: ['applovin'] },
+  { tag: 'MU',     color: '#6366f1', kw: ['micron technology', 'micron memory', 'micron stock', 'dram market', 'nand flash market'] },
+  { tag: 'TSLA',   color: '#cc2222', kw: ['tesla', 'tsla', 'cybertruck', 'model y', 'giga factory', 'elon musk tesla'] },
+  { tag: 'BTC',    color: '#f97316', kw: ['bitcoin price', 'bitcoin market', 'btc cryptocurrency', 'crypto market cap', 'bitcoin surge', 'bitcoin falls'] },
+  { tag: 'USD',    color: '#22c55e', kw: ['dollar index', 'dxy', 'us dollar falls', 'us dollar rises', 'dollar weakens', 'dollar strengthens', 'dollar index falls', 'dollar index rises'] },
+  { tag: '10Y',    color: '#3b82f6', kw: ['10-year yield', '10yr yield', '10-year treasury', 'treasury yield rises', 'treasury yield falls', 'bond yield rises', 'bond yield falls', '10y auction', '20y auction', '30y auction'] },
+  { tag: 'FED',    color: '#3b82f6', kw: ['federal reserve decision', 'fomc decision', 'fomc meeting', 'powell speech', 'fed rate decision', 'rate hike decision', 'rate cut decision', 'fed funds rate decision'] },
+  { tag: 'SPX',    color: '#64748b', kw: ['s&p 500 falls', 's&p 500 rises', 's&p 500 drops', 's&p 500 rally', 'nasdaq falls', 'nasdaq rises', 'dow jones falls', 'dow jones rises', 'equities rally', 'equities fall', 'stock market crash', 'market selloff'] },
+]
+
+function detectAsset(title: string, summary: string): string | null {
+  const text = (title + ' ' + summary).toLowerCase()
+  for (const at of ASSET_MAP) {
+    if (at.kw.some(k => text.includes(k))) return at.tag
+  }
+  return null
+}
+
 function categorize(title: string, summary: string, sourceName?: string) {
   const text = (title + ' ' + summary).toLowerCase()
   for (const cat of CATEGORIES) {
@@ -89,6 +120,7 @@ async function fetchSource(src: typeof SOURCES[0]) {
           sentiment: sentiment(title),
           impactScore: impactScore(src.tier, cat.weight),
           summary,
+          asset: detectAsset(title, summary),
         }
       })
   } catch {

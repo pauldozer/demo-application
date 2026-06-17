@@ -15,6 +15,7 @@ interface NewsItem {
   sentiment: 'bullish' | 'bearish' | 'neutral'
   impactScore: number
   summary: string
+  asset: string | null
 }
 
 interface PriceTick {
@@ -26,21 +27,28 @@ interface PriceTick {
   marketState: string
 }
 
-// ── Constants ──────────────────────────────────────────────────────────────
-const CALENDAR_EVENTS = [
-  { date: '2026-06-17', event: 'FOMC Decision',       impact: 5, category: 'FED/RATES', color: '#3b82f6' },
-  { date: '2026-06-25', event: 'CPI — May 2026',       impact: 4, category: 'MACRO',     color: '#ef4444' },
-  { date: '2026-07-05', event: 'NFP Payrolls — June',  impact: 5, category: 'MACRO',     color: '#ef4444' },
-  { date: '2026-07-28', event: 'FOMC Decision',        impact: 5, category: 'FED/RATES', color: '#3b82f6' },
-  { date: '2026-08-14', event: 'CPI — July 2026',      impact: 4, category: 'MACRO',     color: '#ef4444' },
-  { date: '2026-09-01', event: 'NFP Payrolls — Aug',   impact: 5, category: 'MACRO',     color: '#ef4444' },
-  { date: '2026-09-16', event: 'FOMC Decision',        impact: 5, category: 'FED/RATES', color: '#3b82f6' },
-  { date: '2026-10-29', event: 'FOMC Decision',        impact: 5, category: 'FED/RATES', color: '#3b82f6' },
-  { date: '2026-12-10', event: 'FOMC Decision',        impact: 5, category: 'FED/RATES', color: '#3b82f6' },
-]
+interface CalEvent {
+  date: string
+  time: string
+  event: string
+  impact: number
+  category: string
+  color: string
+  previous: string
+  forecast: string
+}
 
+// ── Constants ──────────────────────────────────────────────────────────────
+const TABS = ['PULSE', 'FLASH', 'WATCHLIST', 'CALENDAR', 'ALL NEWS']
 const CATEGORY_FILTERS = ['ALL', 'FED/RATES', 'MACRO', 'EARNINGS', 'AI/TECH', 'COMMODITIES', 'GEOPOLITICAL', 'CORPORATE']
-const TABS = ['PULSE', 'WATCHLIST', 'CALENDAR', 'ALL NEWS']
+const ASSET_FILTERS = ['ALL', 'OIL', 'GOLD', 'SILVER', 'GAS', 'COPPER', 'NVDA', 'AMD', 'PLTR', 'CEG', 'AVGO', 'MU', 'TSLA', 'BTC', 'FED', '10Y', 'USD', 'SPX']
+
+const ASSET_COLORS: Record<string, string> = {
+  OIL: '#f59e0b', GOLD: '#fbbf24', SILVER: '#94a3b8', GAS: '#06b6d4', COPPER: '#f97316',
+  NVDA: '#22c55e', AMD: '#ef4444', PLTR: '#8b5cf6', CEG: '#3b82f6', AVGO: '#0ea5e9',
+  ARM: '#f97316', VRT: '#10b981', APP: '#ec4899', MU: '#6366f1', TSLA: '#cc2222',
+  BTC: '#f97316', USD: '#22c55e', '10Y': '#3b82f6', FED: '#3b82f6', SPX: '#64748b',
+}
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 function timeAgo(iso: string) {
@@ -56,8 +64,8 @@ function fmt(n: number, decimals = 2) {
   return n.toLocaleString('en-US', { minimumFractionDigits: decimals, maximumFractionDigits: decimals })
 }
 
-function countdown(dateStr: string): string {
-  const target = new Date(dateStr + 'T14:00:00Z').getTime()
+function countdown(dateStr: string, timeUtc = '14:00'): string {
+  const target = new Date(`${dateStr}T${timeUtc}:00Z`).getTime()
   const diff = target - Date.now()
   if (diff <= 0) return 'NOW'
   const d = Math.floor(diff / 86400000)
@@ -68,26 +76,23 @@ function countdown(dateStr: string): string {
   return `${m}m`
 }
 
-function impactDots(score: number) {
+function impactDots(score: number, color = '#f59e0b') {
   return Array.from({ length: 5 }, (_, i) => (
     <span key={i} style={{
       display: 'inline-block', width: 5, height: 5, borderRadius: '50%', marginRight: 2,
-      background: i < score ? '#f59e0b' : '#1e293b',
+      background: i < score ? color : '#1e293b',
     }} />
   ))
 }
 
 // ── Sub-components ─────────────────────────────────────────────────────────
-
 function SourceBadge({ name, color }: { name: string; color: string }) {
   return (
     <span style={{
       background: color + '22', color, border: `1px solid ${color}44`,
       borderRadius: 4, padding: '1px 6px', fontSize: 10, fontWeight: 600,
       letterSpacing: '0.04em', whiteSpace: 'nowrap',
-    }}>
-      {name}
-    </span>
+    }}>{name}</span>
   )
 }
 
@@ -96,9 +101,18 @@ function CategoryBadge({ name, color }: { name: string; color: string }) {
     <span style={{
       background: 'transparent', color, borderLeft: `2px solid ${color}`,
       paddingLeft: 6, fontSize: 10, fontWeight: 700, letterSpacing: '0.06em',
-    }}>
-      {name}
-    </span>
+    }}>{name}</span>
+  )
+}
+
+function AssetChip({ tag, size = 'sm' }: { tag: string; size?: 'sm' | 'md' }) {
+  const color = ASSET_COLORS[tag] ?? '#64748b'
+  return (
+    <span style={{
+      background: color + '22', color, border: `1px solid ${color}55`,
+      borderRadius: 4, padding: size === 'md' ? '2px 8px' : '1px 5px',
+      fontSize: size === 'md' ? 11 : 9, fontWeight: 800, letterSpacing: '0.07em',
+    }}>{tag}</span>
   )
 }
 
@@ -106,24 +120,13 @@ function NewsCard({ item, isNew, compact = false }: { item: NewsItem; isNew?: bo
   const glowClass = item.sentiment === 'bullish' ? 'glow-green' : item.sentiment === 'bearish' ? 'glow-red' : ''
   const age = Date.now() - new Date(item.pubDate).getTime()
   const stale = age > 4 * 3600 * 1000
-
   return (
-    <a
-      href={item.link}
-      target="_blank"
-      rel="noopener noreferrer"
+    <a href={item.link} target="_blank" rel="noopener noreferrer"
       className={`${isNew ? 'item-new' : ''} ${stale ? 'item-stale' : ''} ${glowClass}`}
       style={{
-        display: 'block',
-        background: 'var(--surface)',
-        border: '1px solid var(--border)',
-        borderRadius: 8,
-        padding: compact ? '10px 12px' : '12px 14px',
-        marginBottom: 6,
-        textDecoration: 'none',
-        color: 'inherit',
-        transition: 'border-color 0.15s, background 0.15s',
-        cursor: 'pointer',
+        display: 'block', background: 'var(--surface)', border: '1px solid var(--border)',
+        borderRadius: 8, padding: compact ? '10px 12px' : '12px 14px', marginBottom: 6,
+        textDecoration: 'none', color: 'inherit', transition: 'border-color 0.15s, background 0.15s', cursor: 'pointer',
       }}
       onMouseEnter={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border-2)'; (e.currentTarget as HTMLElement).style.background = 'var(--surface-2)' }}
       onMouseLeave={e => { (e.currentTarget as HTMLElement).style.borderColor = 'var(--border)'; (e.currentTarget as HTMLElement).style.background = 'var(--surface)' }}
@@ -131,10 +134,9 @@ function NewsCard({ item, isNew, compact = false }: { item: NewsItem; isNew?: bo
       <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6, flexWrap: 'wrap' }}>
         <SourceBadge name={item.source} color={item.sourceColor} />
         <CategoryBadge name={item.category} color={item.categoryColor} />
+        {item.asset && <AssetChip tag={item.asset} />}
         {age < 5 * 60 * 1000 && (
-          <span style={{ background: '#22c55e22', color: '#22c55e', border: '1px solid #22c55e44', borderRadius: 4, padding: '1px 5px', fontSize: 9, fontWeight: 700 }}>
-            NEW
-          </span>
+          <span style={{ background: '#22c55e22', color: '#22c55e', border: '1px solid #22c55e44', borderRadius: 4, padding: '1px 5px', fontSize: 9, fontWeight: 700 }}>NEW</span>
         )}
         <span style={{ marginLeft: 'auto', color: 'var(--text-dim)', fontSize: 11 }}>{timeAgo(item.pubDate)}</span>
       </div>
@@ -165,23 +167,15 @@ function PriceCard({ tick, prevPrice }: { tick: PriceTick; prevPrice?: number })
   const dn = tick.changePct < 0
   const changed = prevPrice !== undefined && prevPrice !== tick.price
   const flashClass = changed ? (tick.price > (prevPrice ?? 0) ? 'flash-up' : 'flash-down') : ''
-
   return (
-    <div className={flashClass} style={{
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: 8,
-      padding: '10px 12px',
-    }}>
+    <div className={flashClass} style={{ background: 'var(--surface)', border: '1px solid var(--border)', borderRadius: 8, padding: '10px 12px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
         <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.06em' }}>{tick.symbol.replace('^', '').replace('=F', '')}</span>
         <span style={{ fontSize: 10, color: tick.marketState === 'REGULAR' ? '#22c55e' : '#64748b' }}>
           {tick.marketState === 'REGULAR' ? '● LIVE' : tick.marketState === 'PRE' ? '◐ PRE' : tick.marketState === 'POST' ? '◑ POST' : '○ CLOSED'}
         </span>
       </div>
-      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--mono)', marginBottom: 2 }}>
-        {fmt(tick.price)}
-      </div>
+      <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', fontFamily: 'var(--mono)', marginBottom: 2 }}>{fmt(tick.price)}</div>
       <div style={{ fontSize: 11, fontWeight: 600, color: up ? '#22c55e' : dn ? '#ef4444' : '#64748b' }}>
         {up ? '+' : ''}{fmt(tick.change)} ({up ? '+' : ''}{fmt(tick.changePct)}%)
       </div>
@@ -190,27 +184,77 @@ function PriceCard({ tick, prevPrice }: { tick: PriceTick; prevPrice?: number })
   )
 }
 
+// Flash card — executive trading intelligence format
+function FlashCard({ item }: { item: NewsItem }) {
+  const color = item.asset ? (ASSET_COLORS[item.asset] ?? '#64748b') : '#64748b'
+  const age = Date.now() - new Date(item.pubDate).getTime()
+  return (
+    <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit', display: 'block', marginBottom: 6 }}>
+      <div style={{
+        borderLeft: `3px solid ${color}`,
+        background: `linear-gradient(90deg, ${color}0d 0%, transparent 100%)`,
+        borderRadius: '0 8px 8px 0', padding: '10px 14px', cursor: 'pointer',
+        transition: 'background 0.15s',
+      }}
+        onMouseEnter={e => (e.currentTarget as HTMLElement).style.background = `linear-gradient(90deg, ${color}1a 0%, transparent 100%)`}
+        onMouseLeave={e => (e.currentTarget as HTMLElement).style.background = `linear-gradient(90deg, ${color}0d 0%, transparent 100%)`}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 7 }}>
+          {item.asset && (
+            <span style={{
+              background: color + '22', color, border: `1px solid ${color}66`,
+              borderRadius: 5, padding: '3px 9px', fontSize: 12, fontWeight: 900,
+              letterSpacing: '0.08em', minWidth: 48, textAlign: 'center', display: 'inline-block',
+            }}>{item.asset}</span>
+          )}
+          <span style={{
+            fontSize: 10, fontWeight: 800, letterSpacing: '0.05em',
+            color: item.sentiment === 'bullish' ? '#22c55e' : item.sentiment === 'bearish' ? '#ef4444' : '#64748b',
+          }}>
+            {item.sentiment === 'bullish' ? '▲ BULLISH' : item.sentiment === 'bearish' ? '▼ BEARISH' : '⬌ NEUTRAL'}
+          </span>
+          <span style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <SourceBadge name={item.source} color={item.sourceColor} />
+            <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{timeAgo(item.pubDate)}</span>
+          </span>
+          {age < 5 * 60 * 1000 && (
+            <span style={{ background: '#22c55e22', color: '#22c55e', borderRadius: 3, padding: '1px 5px', fontSize: 9, fontWeight: 700 }}>NEW</span>
+          )}
+        </div>
+        <div style={{ fontSize: 13, fontWeight: 600, lineHeight: 1.4, color: 'var(--text)', marginBottom: 4 }}>
+          {item.title}
+        </div>
+        {item.summary && (
+          <div style={{ fontSize: 11, color: 'var(--text-dim)', lineHeight: 1.5 }}>
+            {item.summary.slice(0, 100)}{item.summary.length > 100 ? '…' : ''}
+          </div>
+        )}
+      </div>
+    </a>
+  )
+}
+
 // ── Main Dashboard ─────────────────────────────────────────────────────────
 export default function Dashboard() {
-  const [news, setNews]           = useState<NewsItem[]>([])
-  const [newIds, setNewIds]       = useState<Set<string>>(new Set())
-  const [market, setMarket]       = useState<PriceTick[]>([])
-  const [watchlist, setWatchlist] = useState<PriceTick[]>([])
-  const [prevWl, setPrevWl]       = useState<Record<string, number>>({})
-  const [tab, setTab]             = useState('PULSE')
-  const [catFilter, setCatFilter] = useState('ALL')
-  const [now, setNow]             = useState(new Date())
-  const [newsAt, setNewsAt]       = useState<string | null>(null)
-  const [pricesAt, setPricesAt]   = useState<string | null>(null)
+  const [news, setNews]               = useState<NewsItem[]>([])
+  const [newIds, setNewIds]           = useState<Set<string>>(new Set())
+  const [market, setMarket]           = useState<PriceTick[]>([])
+  const [watchlist, setWatchlist]     = useState<PriceTick[]>([])
+  const [prevWl, setPrevWl]           = useState<Record<string, number>>({})
+  const [calEvents, setCalEvents]     = useState<CalEvent[]>([])
+  const [tab, setTab]                 = useState('PULSE')
+  const [catFilter, setCatFilter]     = useState('ALL')
+  const [assetFilter, setAssetFilter] = useState('ALL')
+  const [now, setNow]                 = useState(new Date())
+  const [newsAt, setNewsAt]           = useState<string | null>(null)
+  const [pricesAt, setPricesAt]       = useState<string | null>(null)
   const knownIds = useRef(new Set<string>())
 
-  // Clock tick every second
   useEffect(() => {
     const t = setInterval(() => setNow(new Date()), 1000)
     return () => clearInterval(t)
   }, [])
 
-  // Fetch news
   const fetchNews = useCallback(async () => {
     try {
       const res = await fetch('/api/news')
@@ -231,7 +275,6 @@ export default function Dashboard() {
     } catch { /* silent */ }
   }, [])
 
-  // Fetch prices
   const fetchPrices = useCallback(async () => {
     try {
       const res = await fetch('/api/prices')
@@ -247,30 +290,53 @@ export default function Dashboard() {
     } catch { /* silent */ }
   }, [])
 
+  const fetchCalendar = useCallback(async () => {
+    try {
+      const res = await fetch('/api/calendar')
+      const data = await res.json()
+      setCalEvents(data.events ?? [])
+    } catch { /* silent */ }
+  }, [])
+
   useEffect(() => {
-    fetchNews()
-    fetchPrices()
+    fetchNews(); fetchPrices(); fetchCalendar()
     const ni = setInterval(fetchNews, 90_000)
     const pi = setInterval(fetchPrices, 20_000)
-    return () => { clearInterval(ni); clearInterval(pi) }
-  }, [fetchNews, fetchPrices])
+    const ci = setInterval(fetchCalendar, 3_600_000)
+    return () => { clearInterval(ni); clearInterval(pi); clearInterval(ci) }
+  }, [fetchNews, fetchPrices, fetchCalendar])
 
-  const filtered = catFilter === 'ALL' ? news : news.filter(i => i.category === catFilter)
-  const topImpact = [...news].sort((a, b) => b.impactScore - a.impactScore).slice(0, 10)
-  const breaking = topImpact[0]
-  const nextEvent = CALENDAR_EVENTS.find(e => new Date(e.date + 'T14:00:00Z').getTime() > Date.now())
-  const upcomingEvents = CALENDAR_EVENTS.filter(e => new Date(e.date + 'T14:00:00Z').getTime() > Date.now()).slice(0, 5)
+  // Derived data
+  const timelineItems = news.filter(i => {
+    if (catFilter !== 'ALL' && i.category !== catFilter) return false
+    if (assetFilter !== 'ALL' && i.asset !== assetFilter) return false
+    return true
+  })
+  const flashItems = assetFilter === 'ALL'
+    ? news.filter(i => i.asset !== null)
+    : news.filter(i => i.asset === assetFilter)
+  const topImpact  = [...news].sort((a, b) => b.impactScore - a.impactScore).slice(0, 10)
+  const breaking   = topImpact[0]
+  const upcoming   = calEvents.filter(e => new Date(`${e.date}T${e.time}:00Z`).getTime() > Date.now()).slice(0, 5)
+  const nextEvent  = upcoming[0]
+
+  // Filter pill button helper
+  const filterBtn = (label: string, active: boolean, onClick: () => void, color?: string) => (
+    <button key={label} onClick={onClick} style={{
+      padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700,
+      letterSpacing: '0.05em', border: '1px solid', cursor: 'pointer',
+      background: active ? (color ?? 'var(--accent)') : 'transparent',
+      borderColor: active ? (color ?? 'var(--accent)') : 'var(--border)',
+      color: active ? '#fff' : 'var(--text-dim)',
+      transition: 'all 0.12s',
+    }}>{label}</button>
+  )
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', height: '100vh', overflow: 'hidden', background: 'var(--bg)' }}>
 
       {/* ── HEADER ── */}
-      <header style={{
-        borderBottom: '1px solid var(--border)',
-        background: 'linear-gradient(to bottom, #0a0f1e, var(--surface))',
-        flexShrink: 0,
-      }}>
-        {/* Top bar */}
+      <header style={{ borderBottom: '1px solid var(--border)', background: 'linear-gradient(to bottom, #0a0f1e, var(--surface))', flexShrink: 0 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 16px', borderBottom: '1px solid var(--border)' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
             <span className="live-dot" />
@@ -282,12 +348,9 @@ export default function Dashboard() {
               <button key={t} onClick={() => setTab(t)} style={{
                 padding: '4px 12px', borderRadius: 6, fontSize: 11, fontWeight: 700,
                 letterSpacing: '0.06em', border: 'none', cursor: 'pointer',
-                background: tab === t ? 'var(--accent)' : 'transparent',
-                color: tab === t ? '#fff' : 'var(--text-dim)',
-                transition: 'all 0.15s',
-              }}>
-                {t}
-              </button>
+                background: tab === t ? (t === 'FLASH' ? '#f59e0b' : 'var(--accent)') : 'transparent',
+                color: tab === t ? '#fff' : 'var(--text-dim)', transition: 'all 0.15s',
+              }}>{t}</button>
             ))}
           </div>
           <div style={{ fontSize: 11, color: 'var(--text-dim)', textAlign: 'right' }}>
@@ -295,20 +358,15 @@ export default function Dashboard() {
             {newsAt && <span style={{ marginLeft: 8, color: '#334155' }}>· {news.length} items</span>}
           </div>
         </div>
-
         {/* Ticker strip */}
-        <div style={{ overflow: 'hidden', padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
+        <div style={{ overflow: 'hidden', padding: '5px 0' }}>
           <div className="ticker-track" style={{ display: 'flex', whiteSpace: 'nowrap', alignItems: 'center' }}>
             {[...market, ...market].map((t, i) => {
               const up = t.changePct > 0; const dn = t.changePct < 0
               return (
                 <span key={i} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '0 20px', borderRight: '1px solid var(--border)' }}>
-                  <span style={{ fontWeight: 700, fontSize: 11, color: 'var(--text-dim)', letterSpacing: '0.08em' }}>
-                    {t.name}
-                  </span>
-                  <span className="mono" style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>
-                    {fmt(t.price)}
-                  </span>
+                  <span style={{ fontWeight: 700, fontSize: 11, color: 'var(--text-dim)', letterSpacing: '0.08em' }}>{t.name}</span>
+                  <span className="mono" style={{ fontSize: 12, color: 'var(--text)', fontWeight: 600 }}>{fmt(t.price)}</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: up ? '#22c55e' : dn ? '#ef4444' : '#64748b' }}>
                     {up ? '▲' : dn ? '▼' : '▬'} {Math.abs(t.changePct).toFixed(2)}%
                   </span>
@@ -323,79 +381,57 @@ export default function Dashboard() {
       <div style={{ display: 'flex', flex: 1, overflow: 'hidden' }}>
 
         {/* LEFT — Timeline */}
-        <aside style={{
-          width: 300, flexShrink: 0,
-          borderRight: '1px solid var(--border)',
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-        }}>
-          {/* Timeline header */}
+        <aside style={{ width: 300, flexShrink: 0, borderRight: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ padding: '10px 12px 8px', borderBottom: '1px solid var(--border)', flexShrink: 0 }}>
-            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 8 }}>
+            <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-dim)', letterSpacing: '0.08em', marginBottom: 7 }}>
               LIVE TIMELINE
-              {newsAt && (
-                <span style={{ float: 'right', fontWeight: 400, color: '#334155' }}>
-                  updated {timeAgo(newsAt)}
-                </span>
-              )}
+              {newsAt && <span style={{ float: 'right', fontWeight: 400, color: '#334155' }}>updated {timeAgo(newsAt)}</span>}
             </div>
-            {/* Category filters */}
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-              {CATEGORY_FILTERS.map(c => (
-                <button key={c} onClick={() => setCatFilter(c)} style={{
-                  padding: '2px 7px', borderRadius: 4, fontSize: 9, fontWeight: 700,
-                  letterSpacing: '0.05em', border: '1px solid', cursor: 'pointer',
-                  background: catFilter === c ? 'var(--accent)' : 'transparent',
-                  borderColor: catFilter === c ? 'var(--accent)' : 'var(--border)',
-                  color: catFilter === c ? '#fff' : 'var(--text-dim)',
-                  transition: 'all 0.12s',
-                }}>
-                  {c === 'ALL' ? 'ALL' : c.split('/')[0]}
-                </button>
+            {/* Category filter row */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 5 }}>
+              {CATEGORY_FILTERS.map(c => filterBtn(
+                c === 'ALL' ? 'ALL' : c.split('/')[0],
+                catFilter === c,
+                () => setCatFilter(c)
               ))}
+            </div>
+            {/* Asset filter row */}
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, paddingTop: 4, borderTop: '1px solid var(--border)' }}>
+              <span style={{ fontSize: 8, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', marginRight: 2 }}>ASSET</span>
+              {ASSET_FILTERS.map(a => {
+                const color = ASSET_COLORS[a] ?? 'var(--accent)'
+                return filterBtn(a, assetFilter === a, () => setAssetFilter(a), assetFilter === a ? color : undefined)
+              })}
             </div>
           </div>
 
-          {/* Timeline items */}
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 10px' }}>
-            {filtered.length === 0 ? (
+            {timelineItems.length === 0 ? (
               <div style={{ color: 'var(--text-dim)', textAlign: 'center', marginTop: 40, fontSize: 12 }}>
-                Loading live data…
+                {assetFilter !== 'ALL' ? `No ${assetFilter} news in last 6h` : 'Loading live data…'}
               </div>
             ) : (
-              filtered.map((item, idx) => {
+              timelineItems.map((item, idx) => {
                 const age = Date.now() - new Date(item.pubDate).getTime()
                 const stale = age > 4 * 3600 * 1000
                 return (
-                  <div key={item.id} style={{ display: 'flex', gap: 10, marginBottom: 8, position: 'relative' }} className={newIds.has(item.id) ? 'item-new' : ''}>
-                    {/* Timeline dot + line */}
+                  <div key={item.id} style={{ display: 'flex', gap: 10, marginBottom: 8 }} className={newIds.has(item.id) ? 'item-new' : ''}>
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flexShrink: 0, paddingTop: 3 }}>
-                      <div style={{
-                        width: 9, height: 9, borderRadius: '50%',
-                        background: item.categoryColor,
-                        boxShadow: `0 0 6px ${item.categoryColor}88`,
-                        flexShrink: 0,
-                      }} />
-                      {idx < filtered.length - 1 && (
-                        <div style={{ width: 1, flex: 1, minHeight: 20, background: 'var(--border)', marginTop: 3 }} />
-                      )}
+                      <div style={{ width: 9, height: 9, borderRadius: '50%', background: item.categoryColor, boxShadow: `0 0 6px ${item.categoryColor}88`, flexShrink: 0 }} />
+                      {idx < timelineItems.length - 1 && <div style={{ width: 1, flex: 1, minHeight: 20, background: 'var(--border)', marginTop: 3 }} />}
                     </div>
-                    {/* Content */}
                     <div style={{ flex: 1, opacity: stale ? 0.38 : 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
                         <CategoryBadge name={item.category} color={item.categoryColor} />
+                        {item.asset && <AssetChip tag={item.asset} />}
                         <span style={{ marginLeft: 'auto', color: 'var(--text-muted)', fontSize: 10 }}>{timeAgo(item.pubDate)}</span>
                       </div>
                       <a href={item.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
-                        <div style={{ fontSize: 12, lineHeight: 1.4, color: 'var(--text)', fontWeight: 500, marginBottom: 3 }}>
-                          {item.title}
-                        </div>
+                        <div style={{ fontSize: 12, lineHeight: 1.4, color: 'var(--text)', fontWeight: 500, marginBottom: 3 }}>{item.title}</div>
                       </a>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                         <SourceBadge name={item.source} color={item.sourceColor} />
-                        {age < 5 * 60 * 1000 && (
-                          <span style={{ background: '#22c55e22', color: '#22c55e', borderRadius: 3, padding: '0 4px', fontSize: 9, fontWeight: 700 }}>NEW</span>
-                        )}
+                        {age < 5 * 60 * 1000 && <span style={{ background: '#22c55e22', color: '#22c55e', borderRadius: 3, padding: '0 4px', fontSize: 9, fontWeight: 700 }}>NEW</span>}
                         {item.sentiment !== 'neutral' && (
                           <span style={{ fontSize: 9, fontWeight: 700, color: item.sentiment === 'bullish' ? '#22c55e' : '#ef4444' }}>
                             {item.sentiment === 'bullish' ? '▲' : '▼'}
@@ -414,38 +450,31 @@ export default function Dashboard() {
         <main style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '14px 16px' }}>
 
-            {/* PULSE TAB */}
+            {/* ── PULSE TAB ── */}
             {tab === 'PULSE' && (
               <div>
-                {/* Breaking — top item */}
                 {breaking && (
                   <div style={{
-                    background: 'linear-gradient(135deg, var(--surface-2), var(--surface-3))',
-                    border: `1px solid ${breaking.categoryColor}55`,
-                    borderRadius: 10,
-                    padding: '16px 18px',
-                    marginBottom: 16,
+                    background: 'linear-gradient(135deg, var(--surface-2), var(--surface))',
+                    border: `1px solid ${breaking.categoryColor}55`, borderRadius: 10,
+                    padding: '16px 18px', marginBottom: 16,
                     boxShadow: `0 0 30px ${breaking.categoryColor}18`,
                   }}>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                       <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: '#ef4444' }}>⚡ BREAKING</span>
                       <SourceBadge name={breaking.source} color={breaking.sourceColor} />
                       <CategoryBadge name={breaking.category} color={breaking.categoryColor} />
+                      {breaking.asset && <AssetChip tag={breaking.asset} size="md" />}
                       <span style={{ marginLeft: 'auto', color: 'var(--text-dim)', fontSize: 11 }}>{timeAgo(breaking.pubDate)}</span>
                     </div>
                     <a href={breaking.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: 'none', color: 'inherit' }}>
-                      <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.4, color: 'var(--text)', marginBottom: 8 }}>
-                        {breaking.title}
-                      </div>
+                      <div style={{ fontSize: 16, fontWeight: 700, lineHeight: 1.4, color: 'var(--text)', marginBottom: 8 }}>{breaking.title}</div>
                     </a>
                     {breaking.summary && (
-                      <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 10 }}>
-                        {breaking.summary}
-                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-dim)', lineHeight: 1.6, marginBottom: 10 }}>{breaking.summary}</div>
                     )}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ display: 'flex' }}>{impactDots(breaking.impactScore)}</div>
-                      <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>Impact</span>
                       {breaking.sentiment !== 'neutral' && (
                         <span style={{ fontSize: 11, fontWeight: 700, color: breaking.sentiment === 'bullish' ? '#22c55e' : '#ef4444' }}>
                           {breaking.sentiment === 'bullish' ? '▲ BULLISH SIGNAL' : '▼ BEARISH SIGNAL'}
@@ -454,21 +483,11 @@ export default function Dashboard() {
                     </div>
                   </div>
                 )}
-
-                {/* Divider */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
-                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--text-dim)' }}>TOP IMPACT — LAST 3H</span>
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--text-dim)' }}>TOP IMPACT — LAST 6H</span>
                   <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                 </div>
-
-                {/* Top impact items */}
-                <div>
-                  {topImpact.slice(1).map((item) => (
-                    <NewsCard key={item.id} item={item} isNew={newIds.has(item.id)} />
-                  ))}
-                </div>
-
-                {/* Active sources */}
+                {topImpact.slice(1).map(item => <NewsCard key={item.id} item={item} isNew={newIds.has(item.id)} />)}
                 <div style={{ marginTop: 16, padding: '12px 14px', background: 'var(--surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-dim)', marginBottom: 8 }}>ACTIVE SOURCES</div>
                   <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
@@ -489,7 +508,50 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* WATCHLIST TAB */}
+            {/* ── FLASH TAB — Trading Intelligence ── */}
+            {tab === 'FLASH' && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                  <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: '#f59e0b' }}>⚡ TRADING INTELLIGENCE</span>
+                  <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                  <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>{flashItems.length} asset-tagged items</span>
+                </div>
+
+                {/* Asset filter pills */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginBottom: 14, padding: '10px 12px', background: 'var(--surface)', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: 'var(--text-muted)', letterSpacing: '0.06em', display: 'flex', alignItems: 'center', marginRight: 4 }}>FILTER BY ASSET</span>
+                  {ASSET_FILTERS.map(a => {
+                    const color = ASSET_COLORS[a] ?? '#64748b'
+                    const active = assetFilter === a
+                    const count = a === 'ALL' ? news.filter(i => i.asset !== null).length : news.filter(i => i.asset === a).length
+                    return (
+                      <button key={a} onClick={() => setAssetFilter(a)} style={{
+                        padding: '3px 8px', borderRadius: 5, fontSize: 10, fontWeight: 800,
+                        letterSpacing: '0.05em', border: '1px solid', cursor: 'pointer',
+                        background: active ? (a === 'ALL' ? 'var(--accent)' : color + '33') : 'transparent',
+                        borderColor: active ? (a === 'ALL' ? 'var(--accent)' : color) : 'var(--border)',
+                        color: active ? (a === 'ALL' ? '#fff' : color) : 'var(--text-dim)',
+                        transition: 'all 0.12s',
+                      }}>
+                        {a} {count > 0 && <span style={{ opacity: 0.7, fontSize: 9 }}>({count})</span>}
+                      </button>
+                    )
+                  })}
+                </div>
+
+                {/* Flash feed */}
+                {flashItems.length === 0 ? (
+                  <div style={{ textAlign: 'center', color: 'var(--text-dim)', marginTop: 60, fontSize: 13 }}>
+                    No asset-tagged news in the last 6 hours
+                    {assetFilter !== 'ALL' && <div style={{ marginTop: 8, fontSize: 11 }}>No {assetFilter} news found — try broadening the filter</div>}
+                  </div>
+                ) : (
+                  flashItems.map(item => <FlashCard key={item.id} item={item} />)
+                )}
+              </div>
+            )}
+
+            {/* ── WATCHLIST TAB ── */}
             {tab === 'WATCHLIST' && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14 }}>
@@ -498,80 +560,87 @@ export default function Dashboard() {
                   {pricesAt && <span style={{ fontSize: 10, color: '#334155' }}>prices {timeAgo(pricesAt)}</span>}
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))', gap: 8, marginBottom: 20 }}>
-                  {watchlist.map(t => (
-                    <PriceCard key={t.symbol} tick={t} prevPrice={prevWl[t.symbol]} />
-                  ))}
+                  {watchlist.map(t => <PriceCard key={t.symbol} tick={t} prevPrice={prevWl[t.symbol]} />)}
                 </div>
-
-                {/* Related news for watchlist */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
                   <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--text-dim)' }}>RELATED NEWS</span>
                   <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                 </div>
-                {news
-                  .filter(i => i.category === 'AI/TECH' || i.category === 'EARNINGS' || i.category === 'CORPORATE')
-                  .slice(0, 15)
-                  .map(item => <NewsCard key={item.id} item={item} isNew={newIds.has(item.id)} compact />)
-                }
+                {news.filter(i => i.category === 'AI/TECH' || i.category === 'EARNINGS' || i.category === 'CORPORATE').slice(0, 15).map(item => (
+                  <NewsCard key={item.id} item={item} isNew={newIds.has(item.id)} compact />
+                ))}
               </div>
             )}
 
-            {/* CALENDAR TAB */}
+            {/* ── CALENDAR TAB ── */}
             {tab === 'CALENDAR' && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 16 }}>
                   <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--text-dim)' }}>ECONOMIC CALENDAR</span>
                   <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                  <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>{calEvents.length} events · times in UTC</span>
                 </div>
 
                 {nextEvent && (
                   <div style={{
                     background: `linear-gradient(135deg, ${nextEvent.color}18, var(--surface-2))`,
-                    border: `1px solid ${nextEvent.color}44`,
-                    borderRadius: 10, padding: '16px 18px', marginBottom: 16,
+                    border: `1px solid ${nextEvent.color}44`, borderRadius: 10, padding: '16px 18px', marginBottom: 16,
                   }}>
                     <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: nextEvent.color, marginBottom: 6 }}>NEXT EVENT</div>
-                    <div style={{ fontSize: 20, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>{nextEvent.event}</div>
+                    <div style={{ fontSize: 18, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>{nextEvent.event}</div>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
-                      <span className="mono" style={{ fontSize: 28, fontWeight: 900, color: nextEvent.color }}>
-                        {countdown(nextEvent.date)}
+                      <span className="mono" style={{ fontSize: 26, fontWeight: 900, color: nextEvent.color }}>
+                        {countdown(nextEvent.date, nextEvent.time)}
                       </span>
-                      <span style={{ fontSize: 12, color: 'var(--text-dim)' }}>{new Date(nextEvent.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}</span>
+                      <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>
+                        {new Date(nextEvent.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                        {' · '}{nextEvent.time} UTC
+                      </span>
                     </div>
-                    <div style={{ display: 'flex', marginTop: 8 }}>
+                    <div style={{ display: 'flex', gap: 16, marginTop: 10 }}>
+                      {nextEvent.previous && <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Prev: <strong style={{ color: 'var(--text)' }}>{nextEvent.previous}</strong></span>}
+                      {nextEvent.forecast && <span style={{ fontSize: 11, color: 'var(--text-dim)' }}>Fcst: <strong style={{ color: nextEvent.color }}>{nextEvent.forecast}</strong></span>}
+                    </div>
+                    <div style={{ display: 'flex', marginTop: 8, alignItems: 'center', gap: 6 }}>
                       {Array.from({ length: 5 }, (_, i) => (
-                        <div key={i} style={{ width: 20, height: 4, borderRadius: 2, marginRight: 3, background: i < nextEvent.impact ? nextEvent.color : 'var(--border)' }} />
+                        <div key={i} style={{ width: 20, height: 4, borderRadius: 2, background: i < nextEvent.impact ? nextEvent.color : 'var(--border)' }} />
                       ))}
-                      <span style={{ fontSize: 10, color: 'var(--text-dim)', marginLeft: 6 }}>Impact level</span>
+                      <span style={{ fontSize: 10, color: 'var(--text-dim)' }}>Impact</span>
                     </div>
                   </div>
                 )}
 
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                  {CALENDAR_EVENTS.map(ev => {
-                    const target = new Date(ev.date + 'T14:00:00Z').getTime()
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                  {calEvents.map((ev, i) => {
+                    const target = new Date(`${ev.date}T${ev.time}:00Z`).getTime()
                     const passed = target < Date.now()
+                    const isToday = ev.date === new Date().toISOString().slice(0, 10)
                     return (
-                      <div key={ev.date} style={{
+                      <div key={`${ev.date}-${ev.event}-${i}`} style={{
                         display: 'flex', alignItems: 'center', gap: 12,
-                        background: 'var(--surface)', border: `1px solid ${passed ? 'var(--border)' : ev.color + '33'}`,
-                        borderRadius: 8, padding: '10px 14px', opacity: passed ? 0.4 : 1,
+                        background: 'var(--surface)', border: `1px solid ${passed ? 'var(--border)' : isToday ? ev.color + '55' : ev.color + '22'}`,
+                        borderRadius: 8, padding: '9px 14px', opacity: passed ? 0.35 : 1,
                       }}>
-                        <div style={{ width: 3, height: 36, borderRadius: 2, background: ev.color, flexShrink: 0 }} />
-                        <div style={{ flex: 1 }}>
-                          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text)' }}>{ev.event}</div>
-                          <div style={{ fontSize: 11, color: 'var(--text-dim)', marginTop: 2 }}>
+                        <div style={{ width: 3, height: 32, borderRadius: 2, background: ev.color, flexShrink: 0 }} />
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.event}</div>
+                          <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 1 }}>
                             {new Date(ev.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                            {ev.time !== '00:00' && ` · ${ev.time} UTC`}
                           </div>
                         </div>
-                        <div style={{ textAlign: 'right' }}>
-                          {!passed && (
-                            <div className="mono" style={{ fontSize: 14, fontWeight: 800, color: ev.color }}>{countdown(ev.date)}</div>
-                          )}
-                          {passed && <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>PASSED</div>}
-                          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 3 }}>
-                            {Array.from({ length: 5 }, (_, i) => (
-                              <div key={i} style={{ width: 8, height: 3, borderRadius: 1, marginLeft: 2, background: i < ev.impact ? ev.color : 'var(--border)' }} />
+                        {(ev.previous || ev.forecast) && (
+                          <div style={{ fontSize: 10, color: 'var(--text-dim)', textAlign: 'center', minWidth: 60 }}>
+                            {ev.previous && <div>Prev: <span style={{ color: 'var(--text)' }}>{ev.previous}</span></div>}
+                            {ev.forecast && <div>Fcst: <span style={{ color: ev.color, fontWeight: 700 }}>{ev.forecast}</span></div>}
+                          </div>
+                        )}
+                        <div style={{ textAlign: 'right', minWidth: 58 }}>
+                          {!passed && <div className="mono" style={{ fontSize: 13, fontWeight: 800, color: ev.color }}>{countdown(ev.date, ev.time)}</div>}
+                          {passed && <div style={{ fontSize: 10, color: 'var(--text-muted)' }}>PASSED</div>}
+                          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 2, marginTop: 3 }}>
+                            {Array.from({ length: 5 }, (_, j) => (
+                              <div key={j} style={{ width: 7, height: 3, borderRadius: 1, background: j < ev.impact ? ev.color : 'var(--border)' }} />
                             ))}
                           </div>
                         </div>
@@ -582,7 +651,7 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* ALL NEWS TAB */}
+            {/* ── ALL NEWS TAB ── */}
             {tab === 'ALL NEWS' && (
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
@@ -590,24 +659,17 @@ export default function Dashboard() {
                   <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
                   <span style={{ fontSize: 10, color: '#334155' }}>{news.length} items</span>
                 </div>
-                {news.map(item => (
-                  <NewsCard key={item.id} item={item} isNew={newIds.has(item.id)} compact />
-                ))}
+                {news.map(item => <NewsCard key={item.id} item={item} isNew={newIds.has(item.id)} compact />)}
               </div>
             )}
           </div>
         </main>
 
         {/* RIGHT — Signals */}
-        <aside style={{
-          width: 260, flexShrink: 0,
-          borderLeft: '1px solid var(--border)',
-          display: 'flex', flexDirection: 'column',
-          overflow: 'hidden',
-        }}>
+        <aside style={{ width: 260, flexShrink: 0, borderLeft: '1px solid var(--border)', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
           <div style={{ flex: 1, overflowY: 'auto', padding: '12px 10px' }}>
 
-            {/* Market indices compact */}
+            {/* Market indices */}
             <div style={{ marginBottom: 14 }}>
               <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-dim)', marginBottom: 8 }}>INDICES</div>
               {market.map(t => {
@@ -626,36 +688,39 @@ export default function Dashboard() {
               })}
             </div>
 
-            {/* Calendar countdown */}
+            {/* Upcoming events */}
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-dim)', marginBottom: 8 }}>UPCOMING EVENTS</div>
-              {upcomingEvents.map(ev => (
-                <div key={ev.date} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
-                  <div>
-                    <div style={{ fontSize: 11, color: 'var(--text)', fontWeight: 500 }}>{ev.event}</div>
-                    <div style={{ fontSize: 10, color: ev.color, fontWeight: 600, marginTop: 1 }}>{ev.category}</div>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-dim)', marginBottom: 8 }}>📅 UPCOMING</div>
+              {upcoming.length === 0 && <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Loading calendar…</div>}
+              {upcoming.map((ev, i) => (
+                <div key={i} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 11, color: 'var(--text)', fontWeight: 500, lineHeight: 1.3 }}>{ev.event}</div>
+                      <div style={{ fontSize: 10, color: ev.color, fontWeight: 600, marginTop: 1 }}>
+                        {new Date(ev.date + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                        {ev.time !== '00:00' && ` ${ev.time}`}
+                      </div>
+                    </div>
+                    <div className="mono" style={{ fontSize: 13, fontWeight: 800, color: ev.color, marginLeft: 8, whiteSpace: 'nowrap' }}>
+                      {countdown(ev.date, ev.time)}
+                    </div>
                   </div>
-                  <div className="mono" style={{ fontSize: 12, fontWeight: 800, color: ev.color }}>{countdown(ev.date)}</div>
                 </div>
               ))}
             </div>
 
-            {/* SEC EDGAR 8-K live feed */}
+            {/* SEC 8-K filings */}
             <div style={{ marginBottom: 14 }}>
-              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-dim)', marginBottom: 8 }}>
-                ⚡ SEC 8-K FILINGS
-              </div>
-              {news.filter(i => i.source === 'SEC EDGAR').slice(0, 8).map(item => (
-                <a key={item.id} href={item.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none', color: 'inherit', padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+              <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: '0.08em', color: 'var(--text-dim)', marginBottom: 8 }}>⚡ SEC 8-K FILINGS</div>
+              {news.filter(i => i.source === 'SEC EDGAR').slice(0, 6).map(item => (
+                <a key={item.id} href={item.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none', color: 'inherit', padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
                   <div style={{ fontSize: 11, color: 'var(--text)', fontWeight: 500, lineHeight: 1.35, marginBottom: 2 }}>
-                    {item.title.slice(0, 70)}{item.title.length > 70 ? '…' : ''}
+                    {item.title.slice(0, 65)}{item.title.length > 65 ? '…' : ''}
                   </div>
                   <div style={{ fontSize: 10, color: 'var(--text-dim)' }}>{timeAgo(item.pubDate)}</div>
                 </a>
               ))}
-              {news.filter(i => i.source === 'SEC EDGAR').length === 0 && (
-                <div style={{ fontSize: 11, color: 'var(--text-dim)' }}>Loading filings…</div>
-              )}
             </div>
 
             {/* Bearish signals */}
@@ -665,10 +730,11 @@ export default function Dashboard() {
                 {news.filter(i => i.sentiment === 'bearish').slice(0, 4).map(item => (
                   <a key={item.id} href={item.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none', padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
                     <div style={{ fontSize: 11, color: '#ef4444', fontWeight: 500, lineHeight: 1.35 }}>
-                      {item.title.slice(0, 70)}{item.title.length > 70 ? '…' : ''}
+                      {item.title.slice(0, 65)}{item.title.length > 65 ? '…' : ''}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
                       <SourceBadge name={item.source} color={item.sourceColor} />
+                      {item.asset && <AssetChip tag={item.asset} />}
                       <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{timeAgo(item.pubDate)}</span>
                     </div>
                   </a>
@@ -683,10 +749,11 @@ export default function Dashboard() {
                 {news.filter(i => i.sentiment === 'bullish').slice(0, 4).map(item => (
                   <a key={item.id} href={item.link} target="_blank" rel="noopener noreferrer" style={{ display: 'block', textDecoration: 'none', padding: '5px 0', borderBottom: '1px solid var(--border)' }}>
                     <div style={{ fontSize: 11, color: '#22c55e', fontWeight: 500, lineHeight: 1.35 }}>
-                      {item.title.slice(0, 70)}{item.title.length > 70 ? '…' : ''}
+                      {item.title.slice(0, 65)}{item.title.length > 65 ? '…' : ''}
                     </div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 2 }}>
                       <SourceBadge name={item.source} color={item.sourceColor} />
+                      {item.asset && <AssetChip tag={item.asset} />}
                       <span style={{ fontSize: 10, color: 'var(--text-muted)' }}>{timeAgo(item.pubDate)}</span>
                     </div>
                   </a>
