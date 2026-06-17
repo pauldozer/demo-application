@@ -5,18 +5,38 @@ export const revalidate = 90
 const parser = new Parser({ timeout: 8000 })
 
 const SOURCES = [
-  { name: 'Reuters',         url: 'https://feeds.reuters.com/reuters/businessNews',                                                                    color: '#f97316', tier: 1 },
-  { name: 'Benzinga',        url: 'https://www.benzinga.com/news/feed',                                                                               color: '#8b5cf6', tier: 1 },
-  { name: 'CNBC',            url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html',                                                            color: '#3b82f6', tier: 1 },
-  { name: 'MarketWatch',     url: 'https://feeds.marketwatch.com/marketwatch/topstories/',                                                            color: '#10b981', tier: 2 },
-  { name: 'Yahoo Finance',   url: 'https://finance.yahoo.com/rss/topfinstories',                                                                      color: '#6366f1', tier: 2 },
-  { name: 'Zero Hedge',      url: 'https://feeds.feedburner.com/zerohedge/feed',                                                                      color: '#ef4444', tier: 2 },
-  { name: 'Seeking Alpha',   url: 'https://seekingalpha.com/feed.xml',                                                                                color: '#0ea5e9', tier: 2 },
-  { name: 'Kitco',           url: 'https://www.kitco.com/rss/kitco-news-full.rss',                                                                    color: '#fbbf24', tier: 3 },
-  { name: 'OilPrice',        url: 'https://oilprice.com/rss/main',                                                                                    color: '#f59e0b', tier: 3 },
-  { name: 'Globe Newswire',  url: 'https://www.globenewswire.com/RssFeed/subjectcode/17-Merger+%26+Acquisition',                                      color: '#64748b', tier: 3 },
-  { name: 'Investing.com',   url: 'https://www.investing.com/rss/news_25.rss',                                                                        color: '#16a34a', tier: 3 },
-  { name: 'SEC EDGAR',       url: 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&dateb=&owner=include&count=40&output=atom',    color: '#dc2626', tier: 4 },
+  // Tier 1 — Fastest breaking news
+  { name: 'Reuters',          url: 'https://feeds.reuters.com/reuters/businessNews',                                                                    color: '#f97316', tier: 1 },
+  { name: 'Reuters World',    url: 'https://feeds.reuters.com/reuters/worldNews',                                                                       color: '#ea580c', tier: 1 },
+  { name: 'Benzinga',         url: 'https://www.benzinga.com/news/feed',                                                                               color: '#8b5cf6', tier: 1 },
+  { name: 'CNBC',             url: 'https://www.cnbc.com/id/100003114/device/rss/rss.html',                                                            color: '#3b82f6', tier: 1 },
+  { name: 'CNBC Markets',     url: 'https://www.cnbc.com/id/20910258/device/rss/rss.html',                                                             color: '#2563eb', tier: 1 },
+  { name: 'WSJ Markets',      url: 'https://feeds.a.dj.com/rss/RSSMarketsMain.xml',                                                                    color: '#d97706', tier: 1 },
+  { name: 'Bloomberg',        url: 'https://feeds.bloomberg.com/markets/news.rss',                                                                     color: '#1d4ed8', tier: 1 },
+  { name: 'AP Business',      url: 'https://feeds.apnews.com/rss/APBusiness',                                                                          color: '#b91c1c', tier: 1 },
+
+  // Tier 2 — High-quality, frequent updates
+  { name: 'Financial Times',  url: 'https://www.ft.com/rss/home',                                                                                      color: '#f59e0b', tier: 2 },
+  { name: 'MarketWatch',      url: 'https://feeds.marketwatch.com/marketwatch/topstories/',                                                            color: '#10b981', tier: 2 },
+  { name: 'Yahoo Finance',    url: 'https://finance.yahoo.com/rss/topfinstories',                                                                      color: '#6366f1', tier: 2 },
+  { name: 'Zero Hedge',       url: 'https://feeds.feedburner.com/zerohedge/feed',                                                                      color: '#ef4444', tier: 2 },
+  { name: 'Seeking Alpha',    url: 'https://seekingalpha.com/feed.xml',                                                                                color: '#0ea5e9', tier: 2 },
+  { name: 'TechCrunch',       url: 'https://techcrunch.com/feed/',                                                                                     color: '#16a34a', tier: 2 },
+  { name: 'Business Insider', url: 'https://feeds.businessinsider.com/custom/all',                                                                     color: '#0284c7', tier: 2 },
+  { name: 'Semafor',          url: 'https://www.semafor.com/feed',                                                                                     color: '#7c3aed', tier: 2 },
+
+  // Tier 3 — Specialist / commodity / institutional
+  { name: 'Kitco',            url: 'https://www.kitco.com/rss/kitco-news-full.rss',                                                                    color: '#fbbf24', tier: 3 },
+  { name: 'OilPrice',         url: 'https://oilprice.com/rss/main',                                                                                    color: '#f59e0b', tier: 3 },
+  { name: 'Globe Newswire',   url: 'https://www.globenewswire.com/RssFeed/subjectcode/17-Merger+%26+Acquisition',                                      color: '#64748b', tier: 3 },
+  { name: 'Globe Newswire ER',url: 'https://www.globenewswire.com/RssFeed/subjectcode/21-Earnings',                                                    color: '#475569', tier: 3 },
+  { name: 'Investing.com',    url: 'https://www.investing.com/rss/news_25.rss',                                                                        color: '#16a34a', tier: 3 },
+  { name: 'TheStreet',        url: 'https://www.thestreet.com/rss/combined-rss-feed.xml',                                                              color: '#059669', tier: 3 },
+  { name: 'Barrons',          url: 'https://feeds.a.dj.com/rss/RSSBarronsBestMindsBlog.xml',                                                           color: '#78716c', tier: 3 },
+  { name: 'Nasdaq News',      url: 'https://www.nasdaq.com/feed/rssoutbound?category=Markets',                                                         color: '#3b82f6', tier: 3 },
+
+  // Tier 4 — Regulatory / official
+  { name: 'SEC EDGAR',        url: 'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=8-K&dateb=&owner=include&count=40&output=atom',    color: '#dc2626', tier: 4 },
 ]
 
 const CATEGORIES = [
@@ -173,5 +193,5 @@ export async function GET() {
 
   all.sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime())
 
-  return Response.json({ items: all.slice(0, 150), fetchedAt: new Date().toISOString() })
+  return Response.json({ items: all.slice(0, 250), fetchedAt: new Date().toISOString() })
 }
