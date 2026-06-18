@@ -36,6 +36,7 @@ interface CalEvent {
   color: string
   previous: string
   forecast: string
+  actual?: string
 }
 
 interface PriceAlert {
@@ -117,6 +118,16 @@ function countdown(dateStr: string, timeUtc = '14:00'): string {
   if (d > 0) return `${d}d ${h}h`
   if (h > 0) return `${h}h ${m}m`
   return `${m}m`
+}
+
+function resultVibe(event: string, actual = '', forecast = ''): 'beat' | 'miss' | 'inline' | null {
+  if (!actual || !forecast) return null
+  const a = parseFloat(actual.replace(/[^-\d.]/g, ''))
+  const f = parseFloat(forecast.replace(/[^-\d.]/g, ''))
+  if (isNaN(a) || isNaN(f)) return null
+  if (Math.abs(a - f) < 0.05) return 'inline'
+  const lowerIsBetter = /cpi|pce|ppi|inflation|unemployment|jobless|claims|deficit/i.test(event)
+  return (lowerIsBetter ? a < f : a > f) ? 'beat' : 'miss'
 }
 
 function impactDots(score: number, color = '#f59e0b') {
@@ -315,6 +326,7 @@ export default function Dashboard() {
   const [watchlist, setWatchlist]     = useState<PriceTick[]>([])
   const [prevWl, setPrevWl]           = useState<Record<string, number>>({})
   const [calEvents, setCalEvents]     = useState<CalEvent[]>([])
+  const [pastCalEvents, setPastCalEvents] = useState<CalEvent[]>([])
   const [priceAlerts, setPriceAlerts] = useState<PriceAlert[]>([])
   const [tab, setTab]                 = useState('PULSE')
   const [catFilter, setCatFilter]     = useState('ALL')
@@ -427,6 +439,7 @@ export default function Dashboard() {
       const res = await fetch('/api/calendar')
       const data = await res.json()
       setCalEvents(data.events ?? [])
+      setPastCalEvents(data.pastEvents ?? [])
     } catch { /* silent */ }
   }, [])
 
@@ -835,6 +848,68 @@ export default function Dashboard() {
                     )
                   })}
                 </div>
+
+                {/* ── COMPLETED — PAST 15 DAYS ── */}
+                {pastCalEvents.length > 0 && (
+                  <div style={{ marginTop: 24 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+                      <span style={{ fontSize: 10, fontWeight: 800, letterSpacing: '0.1em', color: 'var(--text-dim)' }}>✓ COMPLETED — PAST 15 DAYS</span>
+                      <div style={{ flex: 1, height: 1, background: 'var(--border)' }} />
+                      <span style={{ fontSize: 9, color: 'var(--text-muted)' }}>BLS · Fed · TradingEconomics</span>
+                    </div>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+                      {pastCalEvents.map((ev, i) => {
+                        const vibe = resultVibe(ev.event, ev.actual, ev.forecast)
+                        const vibeColor = vibe === 'beat' ? '#22c55e' : vibe === 'miss' ? '#ef4444' : '#64748b'
+                        return (
+                          <div key={`past-${ev.date}-${ev.event}-${i}`} style={{
+                            display: 'flex', alignItems: 'center', gap: 12,
+                            background: 'var(--surface)',
+                            border: `1px solid ${vibe === 'beat' ? '#22c55e33' : vibe === 'miss' ? '#ef444433' : 'var(--border)'}`,
+                            borderRadius: 8, padding: '9px 14px',
+                          }}>
+                            <div style={{ width: 3, height: 36, borderRadius: 2, background: ev.color, flexShrink: 0 }} />
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--text)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{ev.event}</div>
+                              <div style={{ fontSize: 10, color: 'var(--text-dim)', marginTop: 2 }}>
+                                {new Date(ev.date + 'T00:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}
+                                <span style={{ marginLeft: 6, color: ev.color, fontWeight: 700 }}>{ev.category}</span>
+                              </div>
+                            </div>
+                            <div style={{ fontSize: 10, color: 'var(--text-dim)', textAlign: 'right', lineHeight: 1.7, minWidth: 72 }}>
+                              {ev.previous && <div>Prev <span style={{ color: 'var(--text)' }}>{ev.previous}</span></div>}
+                              {ev.forecast && <div>Fcst <span style={{ color: ev.color, fontWeight: 700 }}>{ev.forecast}</span></div>}
+                              {ev.actual
+                                ? <div>Act <span style={{ color: vibeColor, fontWeight: 800 }}>{ev.actual}</span></div>
+                                : <div style={{ color: '#334155' }}>Act —</div>
+                              }
+                            </div>
+                            <div style={{ textAlign: 'center', minWidth: 48 }}>
+                              {vibe ? (
+                                <div style={{
+                                  fontSize: 9, fontWeight: 800, letterSpacing: '0.07em',
+                                  color: vibeColor,
+                                  background: vibeColor + '1a',
+                                  border: `1px solid ${vibeColor}44`,
+                                  borderRadius: 4, padding: '2px 5px',
+                                }}>
+                                  {vibe === 'beat' ? '▲ BEAT' : vibe === 'miss' ? '▼ MISS' : '= IN LINE'}
+                                </div>
+                              ) : (
+                                <div style={{ fontSize: 9, color: '#1e293b' }}>—</div>
+                              )}
+                              <div style={{ display: 'flex', justifyContent: 'center', gap: 2, marginTop: 4 }}>
+                                {Array.from({ length: 5 }, (_, j) => (
+                                  <div key={j} style={{ width: 6, height: 3, borderRadius: 1, background: j < ev.impact ? ev.color : 'var(--border)' }} />
+                                ))}
+                              </div>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
             )}
 

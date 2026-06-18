@@ -9,6 +9,7 @@ interface TEEvent {
   Previous: string
   Forecast: string
   TEForecast: string
+  Actual?: string
 }
 
 type CalEvent = {
@@ -20,6 +21,7 @@ type CalEvent = {
   color: string
   previous: string
   forecast: string
+  actual?: string
 }
 
 function mapCat(cat: string): { name: string; color: string } {
@@ -125,11 +127,30 @@ const FALLBACK: CalEvent[] = [
   { date: '2026-12-19', time: '12:30', event: 'PCE Price Index — Nov', impact: 4, category: 'MACRO', color: '#ef4444', previous: '2.0%', forecast: '2.0%' },
 ]
 
+// Past 15 days — key US economic events (actuals populated by live API; fallback shows schedule only)
+const FALLBACK_PAST: CalEvent[] = [
+  { date: '2026-06-17', time: '18:00', event: 'FOMC Rate Decision',         impact: 5, category: 'FED/RATES',   color: '#3b82f6', previous: '4.50%',  forecast: '4.50%',  actual: '' },
+  { date: '2026-06-17', time: '18:30', event: 'Fed Press Conference',        impact: 4, category: 'FED/RATES',   color: '#3b82f6', previous: '',        forecast: '',       actual: '' },
+  { date: '2026-06-12', time: '12:30', event: 'PPI — May 2026',              impact: 3, category: 'MACRO',       color: '#ef4444', previous: '2.4%',   forecast: '2.5%',   actual: '' },
+  { date: '2026-06-11', time: '12:30', event: 'CPI — May 2026',              impact: 4, category: 'MACRO',       color: '#ef4444', previous: '2.3%',   forecast: '2.4%',   actual: '' },
+  { date: '2026-06-11', time: '12:30', event: 'Core CPI — May 2026',         impact: 4, category: 'MACRO',       color: '#ef4444', previous: '2.8%',   forecast: '2.8%',   actual: '' },
+  { date: '2026-06-11', time: '12:30', event: 'Initial Jobless Claims',      impact: 3, category: 'MACRO',       color: '#ef4444', previous: '229K',   forecast: '224K',   actual: '' },
+  { date: '2026-06-10', time: '14:30', event: 'EIA Crude Oil Inventories',   impact: 3, category: 'COMMODITIES', color: '#f97316', previous: '-4.3M',  forecast: '-1.5M',  actual: '' },
+  { date: '2026-06-06', time: '12:30', event: 'NFP Payrolls — May',          impact: 5, category: 'MACRO',       color: '#ef4444', previous: '177K',   forecast: '180K',   actual: '' },
+  { date: '2026-06-06', time: '12:30', event: 'Unemployment Rate — May',     impact: 4, category: 'MACRO',       color: '#ef4444', previous: '4.2%',   forecast: '4.2%',   actual: '' },
+  { date: '2026-06-06', time: '12:30', event: 'Average Hourly Earnings',     impact: 3, category: 'MACRO',       color: '#ef4444', previous: '+0.2%',  forecast: '+0.3%',  actual: '' },
+  { date: '2026-06-04', time: '12:30', event: 'Initial Jobless Claims',      impact: 3, category: 'MACRO',       color: '#ef4444', previous: '242K',   forecast: '230K',   actual: '' },
+  { date: '2026-06-04', time: '14:00', event: 'ISM Services PMI — May',      impact: 3, category: 'MACRO',       color: '#ef4444', previous: '51.6',   forecast: '51.5',   actual: '' },
+  { date: '2026-06-03', time: '14:30', event: 'EIA Crude Oil Inventories',   impact: 3, category: 'COMMODITIES', color: '#f97316', previous: '+1.3M',  forecast: '-0.8M',  actual: '' },
+  { date: '2026-06-03', time: '14:00', event: 'ISM Manufacturing PMI — May', impact: 3, category: 'MACRO',       color: '#ef4444', previous: '48.7',   forecast: '48.8',   actual: '' },
+]
+
 export async function GET() {
   try {
+    const past  = new Date(Date.now() - 15 * 86400000).toISOString().slice(0, 10)
     const today = new Date().toISOString().slice(0, 10)
     const end   = new Date(Date.now() + 90 * 86400000).toISOString().slice(0, 10)
-    const url   = `https://api.tradingeconomics.com/calendar/country/united+states/${today}/${end}?c=guest:guest`
+    const url   = `https://api.tradingeconomics.com/calendar/country/united+states/${past}/${end}?c=guest:guest`
 
     const res = await fetch(url, {
       headers: { 'User-Agent': 'Mozilla/5.0 (compatible; MarketPulse/1.0)' },
@@ -140,7 +161,7 @@ export async function GET() {
     const raw: TEEvent[] = await res.json()
     if (!Array.isArray(raw) || raw.length < 5) throw new Error('insufficient data')
 
-    const events: CalEvent[] = raw
+    const allEvents: CalEvent[] = raw
       .filter(e => e.Importance >= 2)
       .map(e => {
         const { name, color } = mapCat(e.Category)
@@ -154,14 +175,26 @@ export async function GET() {
           color,
           previous: e.Previous ?? '',
           forecast: e.Forecast || e.TEForecast || '',
+          actual: e.Actual ?? '',
         }
       })
       .sort((a, b) => a.date.localeCompare(b.date) || a.time.localeCompare(b.time))
 
-    return Response.json({ events, source: 'live', fetchedAt: new Date().toISOString() })
+    const nowMs = Date.now()
+    const events     = allEvents.filter(e => new Date(`${e.date}T${e.time}:00Z`).getTime() > nowMs)
+    const pastEvents = allEvents
+      .filter(e => new Date(`${e.date}T${e.time}:00Z`).getTime() <= nowMs && e.impact >= 3)
+      .reverse()
+      .slice(0, 25)
+
+    return Response.json({ events, pastEvents, source: 'live', fetchedAt: new Date().toISOString() })
   } catch {
     const today = new Date().toISOString().slice(0, 10)
+    const past  = new Date(Date.now() - 15 * 86400000).toISOString().slice(0, 10)
     const events = FALLBACK.filter(e => e.date >= today)
-    return Response.json({ events, source: 'fallback', fetchedAt: new Date().toISOString() })
+    const pastEvents = [...FALLBACK_PAST, ...FALLBACK.filter(e => e.date < today && e.date >= past)]
+      .sort((a, b) => b.date.localeCompare(a.date) || b.time.localeCompare(a.time))
+      .slice(0, 20)
+    return Response.json({ events, pastEvents, source: 'fallback', fetchedAt: new Date().toISOString() })
   }
 }
