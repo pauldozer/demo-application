@@ -297,5 +297,7 @@ app.clientside_callback(
 )
 
 
+server = app.server   # expose Flask server for gunicorn
+
 if __name__ == "__main__":
     app.run(debug=False, port=8050)
