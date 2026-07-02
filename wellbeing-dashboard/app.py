@@ -104,7 +104,7 @@ def filter_summary(mkt_sel, gender_sel, age_sel, n_total):
     parts = []
     specific = [c for c in (mkt_sel or []) if c != "All countries"]
     if specific:
-        parts.append(" + ".join(specific))
+        parts.append(specific[0])        # only one country ever selected
     if gender_sel:
         parts.append(" + ".join(gender_sel))
     if age_sel:
@@ -124,21 +124,46 @@ def kpi_card(title, value, sub=None):
 
 
 def filter_panel():
-    groups = []
-    for group_name, labels in FILTER_GROUPS.items():
-        default = ["All countries"] if group_name == "Market" else []
-        groups.append(html.Div([
-            html.Div(group_name, className="filter-group-label"),
-            dcc.Checklist(
-                id=f"chk-{group_name}",
-                options=[{"label": lbl, "value": lbl} for lbl in labels],
-                value=default,
-                className=f"chk-group chk-{group_name.lower()}",
-                labelClassName="chk-label",
-                inputClassName="chk-input",
-            ),
-        ], className="filter-group"))
-    return html.Div(groups, className="filter-row")
+    # Market — radio (single selection)
+    market_group = html.Div([
+        html.Div("MARKET", className="filter-group-label"),
+        dcc.RadioItems(
+            id="radio-Market",
+            options=[{"label": lbl, "value": lbl} for lbl in FILTER_GROUPS["Market"]],
+            value="All countries",
+            className="chk-group chk-market",
+            labelClassName="chk-label",
+            inputClassName="radio-input",
+        ),
+    ], className="filter-group")
+
+    # Gender — checkbox (OR, can pick both)
+    gender_group = html.Div([
+        html.Div("GENDER", className="filter-group-label"),
+        dcc.Checklist(
+            id="chk-Gender",
+            options=[{"label": lbl, "value": lbl} for lbl in FILTER_GROUPS["Gender"]],
+            value=[],
+            className="chk-group chk-gender",
+            labelClassName="chk-label",
+            inputClassName="chk-input",
+        ),
+    ], className="filter-group")
+
+    # Age — checkbox (OR, can pick multiple bands)
+    age_group = html.Div([
+        html.Div("AGE", className="filter-group-label"),
+        dcc.Checklist(
+            id="chk-Age",
+            options=[{"label": lbl, "value": lbl} for lbl in FILTER_GROUPS["Age"]],
+            value=[],
+            className="chk-group chk-age",
+            labelClassName="chk-label",
+            inputClassName="chk-input",
+        ),
+    ], className="filter-group")
+
+    return html.Div([market_group, gender_group, age_group], className="filter-row")
 
 
 def sidebar_items():
@@ -225,11 +250,14 @@ def set_active_q(*_):
 @app.callback(
     Output("question-panel", "children"),
     Input("active-qid",    "data"),
-    Input("chk-Market",    "value"),
+    Input("radio-Market",  "value"),
     Input("chk-Gender",    "value"),
     Input("chk-Age",       "value"),
 )
-def render_question(qid, mkt_sel, gender_sel, age_sel):
+def render_question(qid, mkt_val, gender_sel, age_sel):
+    # radio returns a single string; wrap for compute_filtered
+    mkt_sel = [mkt_val] if mkt_val else ["All countries"]
+
     q     = funnel_data.get(qid, {})
     label = q.get("label", "")
     multi = q.get("multi", False)

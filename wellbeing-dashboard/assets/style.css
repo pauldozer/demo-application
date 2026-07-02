@@ -109,30 +109,9 @@ body {
   color: #9AA3AE;
 }
 
-/* ── checkboxes ───────────────────────────────────────────────────────────── */
-/* Dash renders each label as <label><input type=checkbox> Text</label> */
+/* ── filter inputs ────────────────────────────────────────────────────────── */
+/* Dash renders each item as <label class="chk-label"><input> Text</label> */
 .chk-group { display: flex; flex-direction: column; gap: 5px; }
-
-/* custom checkbox — style the input directly, no hidden tricks */
-.chk-input {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 15px;
-  height: 15px;
-  border: 1.5px solid #D1D5DB;
-  border-radius: 3px;
-  background: #fff;
-  cursor: pointer;
-  flex-shrink: 0;
-  transition: background .12s, border-color .12s;
-  background-position: center;
-  background-repeat: no-repeat;
-  background-size: 10px 8px;
-}
-
-.chk-input:checked {
-  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 10 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 4l3 3 5-6' stroke='%23fff' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
-}
 
 .chk-label {
   display: flex;
@@ -146,10 +125,44 @@ body {
   line-height: 1;
 }
 
-/* colour per group */
-.chk-market .chk-label         { color: #1F4E79; }
-.chk-market .chk-input         { border-color: #7A8CA5; }
-.chk-market .chk-input:checked { background-color: #1F4E79; border-color: #1F4E79; }
+/* ── shared base for radio + checkbox ─────────────────────────────────────── */
+.radio-input,
+.chk-input {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 15px;
+  height: 15px;
+  border: 1.5px solid #D1D5DB;
+  background: #fff;
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background .12s, border-color .12s;
+}
+
+/* ── radio — circle shape ─────────────────────────────────────────────────── */
+.radio-input {
+  border-radius: 50%;
+  border-color: #7A8CA5;
+}
+.radio-input:checked {
+  background-color: #1F4E79;
+  border-color: #1F4E79;
+  background-image: radial-gradient(circle, #fff 33%, #1F4E79 38%);
+}
+
+.chk-market .chk-label { color: #1F4E79; }
+
+/* ── checkbox — square with tick ──────────────────────────────────────────── */
+.chk-input {
+  border-radius: 3px;
+  background-position: center;
+  background-repeat: no-repeat;
+  background-size: 10px 8px;
+}
+
+.chk-input:checked {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 10 8' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 4l3 3 5-6' stroke='%23fff' stroke-width='1.8' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+}
 
 .chk-gender .chk-label         { color: #4E7C59; }
 .chk-gender .chk-input         { border-color: #82B494; }
