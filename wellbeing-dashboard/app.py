@@ -73,7 +73,7 @@ def make_chart(qid, mkt_sel, gender_sel, age_sel):
         paper_bgcolor = COLORS["white"],
         font=dict(family="Inter, Helvetica Neue, sans-serif", size=12, color="#333"),
         hoverlabel=dict(bgcolor="white", font_size=12),
-        margin=dict(t=10, b=10, l=10, r=175),
+        margin=dict(t=10, b=56, l=10, r=175),
         height=height,
         xaxis=dict(
             range=[0, xmax], tickformat=".0f", ticksuffix="%",
