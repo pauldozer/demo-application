@@ -81,7 +81,7 @@ def make_chart(qid, mkt_sel, gender_sel, age_sel):
             showline=False, zeroline=False,
         ),
         yaxis=dict(showgrid=False, showline=False, automargin=True,
-                   tickfont=dict(size=12)),
+                   tickfont=dict(size=12), ticklabelstandoff=12),
     )
     return fig, n_total
 
